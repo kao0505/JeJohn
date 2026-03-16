@@ -3,94 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>活動分頁記帳 App</title>
+    <title>共同記帳 - 完整功能版</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .editable:hover { background-color: #f3f4f6; cursor: pointer; border-radius: 4px; }
+        /* 隱藏滾動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
 </head>
-<body class="bg-gray-50 p-4">
-    <div id="app" class="max-w-5xl mx-auto">
-        <div class="flex items-center gap-4 mb-6 overflow-x-auto pb-2">
-            <button v-for="event in this.events" :key="event.id"
-                @click="this.currentEventId = event.id"
-                :class="this.currentEventId === event.id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border'"
-                class="px-4 py-2 rounded-lg shadow-sm whitespace-nowrap transition">
-                {{ event.name }}
-            </button>
-            <button @click="this.addNewEvent" class="bg-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300">+</button>
+<body class="bg-gray-50 p-4 md:p-8">
+    <div id="app" v-cloak class="max-w-6xl mx-auto">
+        
+        <div class="flex items-center gap-3 mb-8 overflow-x-auto no-scrollbar pb-2">
+            <div v-for="event in this.events" :key="event.id" class="flex items-center shadow-sm">
+                <button 
+                    @click="this.currentEventId = event.id"
+                    :class="this.currentEventId === event.id ? 'bg-blue-600 text-white font-bold' : 'bg-white text-gray-500 border border-r-0'"
+                    class="px-5 py-2.5 rounded-l-xl whitespace-nowrap transition-all duration-200">
+                    {{ event.name }}
+                </button>
+                <button @click="this.renameEvent(event)" 
+                    :class="this.currentEventId === event.id ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-400 border'"
+                    class="px-3 py-2.5 rounded-r-xl text-xs hover:opacity-80">✎</button>
+            </div>
+            <button @click="this.addNewEvent" class="bg-blue-100 text-blue-600 px-6 py-2.5 rounded-xl hover:bg-blue-200 font-black text-xl transition shadow-sm">+</button>
         </div>
 
-        <div v-if="this.activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div v-if="this.activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
             <div class="lg:col-span-4 space-y-6">
-                <div class="bg-white p-6 rounded-xl shadow-sm border">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold italic">{{ this.activeEvent.name }}</h2>
-                        <button @click="this.deleteEvent" class="text-red-400 text-xs hover:underline">刪除此活動</button>
+                
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-center mb-6 pb-2 border-b border-gray-50">
+                        <h2 class="text-xl font-black text-gray-800 editable px-2 flex items-center gap-2" @click="this.renameEvent(this.activeEvent)">
+                            {{ this.activeEvent.name }} <span class="text-gray-300 text-sm">✎</span>
+                        </h2>
+                        <button @click="this.deleteEvent" class="text-red-300 text-xs hover:text-red-500 transition">刪除活動</button>
                     </div>
 
-                    <div class="flex mb-4">
-                        <input v-model="this.newMemberName" type="text" placeholder="新增成員" class="border p-2 rounded-l w-full text-sm">
-                        <button @click="this.addMember" class="bg-blue-500 text-white px-4 py-2 rounded-r hover:bg-blue-600">加</button>
-                    </div>
-
-                    <div class="space-y-2">
-                        <div v-for="m in this.activeEvent.members" :key="m.id" class="flex justify-between p-2 bg-gray-50 rounded">
-                            <span>{{ m.name }}</span>
-                            <span :class="this.getBalanceClass(m.id)" class="font-bold">
-                                {{ this.calculateBalance(m.id) }}
+                    <div class="space-y-3 mb-6">
+                        <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">成員餘額 (正數代表代墊，負數代表應付)</p>
+                        <div v-for="m in this.activeEvent.members" :key="m.id" class="flex justify-between p-3 bg-gray-50 rounded-xl items-center hover:bg-gray-100 transition">
+                            <span class="editable font-medium text-gray-700 flex-1 px-1" @click="this.renameMember(m)">{{ m.name }} ✎</span>
+                            <span :class="this.getBalanceClass(m.id)" class="font-mono font-black text-lg">
+                                {{ this.calculateBalance(m.id) > 0 ? '+' : '' }}{{ this.calculateBalance(m.id) }}
                             </span>
+                            <button @click="this.deleteMember(m.id)" class="ml-3 text-gray-300 hover:text-red-400">✕</button>
                         </div>
+                    </div>
+
+                    <div class="flex shadow-sm">
+                        <input v-model="this.newMemberName" @keyup.enter="this.addMember" type="text" placeholder="新增成員..." class="border border-r-0 p-3 rounded-l-xl w-full outline-none focus:border-blue-400 transition">
+                        <button @click="this.addMember" class="bg-blue-500 text-white px-5 rounded-r-xl font-bold hover:bg-blue-600 transition">加入</button>
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-xl shadow-sm border">
-                    <h3 class="font-bold mb-4">新增支出</h3>
-                    <div class="space-y-4">
-                        <input v-model.number="this.newRecord.amount" type="number" placeholder="金額" class="border p-2 rounded w-full">
-                        <input v-model="this.newRecord.desc" type="text" placeholder="項目內容" class="border p-2 rounded w-full">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h3 class="font-black text-gray-700 mb-5 flex items-center gap-2">
+                        <span class="w-1.5 h-5 bg-blue-500 rounded-full"></span> 新增帳目
+                    </h3>
+                    <div class="space-y-5">
+                        <div class="relative">
+                            <span class="absolute left-3 top-2.5 text-gray-400 font-bold">$</span>
+                            <input v-model.number="this.newRecord.amount" type="number" placeholder="金額" class="border p-3 pl-8 rounded-xl w-full text-2xl font-black text-blue-600 outline-none focus:border-blue-400">
+                        </div>
+                        <input v-model="this.newRecord.desc" type="text" placeholder="這筆錢花在哪？(如：車資)" class="border p-3 rounded-xl w-full outline-none focus:border-blue-400">
                         
-                        <div>
-                            <label class="text-xs text-gray-500">誰付的錢？</label>
-                            <select v-model="this.newRecord.payerId" class="border p-2 rounded w-full bg-white">
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-gray-400 uppercase">誰先墊錢？</label>
+                            <select v-model="this.newRecord.payerId" class="border p-3 rounded-xl w-full bg-white font-medium text-gray-700 outline-none">
                                 <option v-for="m in this.activeEvent.members" :value="m.id">{{ m.name }}</option>
                             </select>
                         </div>
 
-                        <div>
-                            <label class="text-xs text-gray-500">誰要分擔？</label>
-                            <div class="flex flex-wrap gap-2 mt-1">
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-gray-400 uppercase">誰要共同分擔？ ({{ this.newRecord.participantIds.length }} 人)</label>
+                            <div class="flex flex-wrap gap-2">
                                 <button v-for="m in this.activeEvent.members" 
                                     @click="this.toggleParticipant(m.id)"
-                                    :class="this.newRecord.participantIds.includes(m.id) ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-400 border-gray-200'"
-                                    class="px-3 py-1 rounded-full text-xs border transition">
+                                    :class="this.newRecord.participantIds.includes(m.id) ? 'bg-green-500 text-white border-green-500 shadow-md shadow-green-100' : 'bg-white text-gray-400 border-gray-200'"
+                                    class="px-4 py-1.5 rounded-full text-xs font-bold border transition-all duration-200">
                                     {{ m.name }}
                                 </button>
                             </div>
                         </div>
 
-                        <button @click="this.addRecord" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow-lg shadow-blue-200">記錄一筆</button>
+                        <button @click="this.addRecord" class="w-full bg-gray-800 text-white py-4 rounded-xl font-black text-lg shadow-xl hover:bg-black transition-all active:scale-95">送出帳目</button>
                     </div>
                 </div>
             </div>
 
             <div class="lg:col-span-8">
-                <div class="bg-white p-6 rounded-xl shadow-sm border min-h-[400px]">
-                    <h3 class="font-bold mb-4">帳目流水帳</h3>
-                    <div class="space-y-3">
-                        <div v-for="(r, index) in this.activeEvent.records" :key="r.id" class="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition">
-                            <div class="flex flex-col">
-                                <span class="font-bold text-gray-800">{{ r.desc }}</span>
-                                <span class="text-xs text-gray-400 italic">由 {{ this.getMemberName(r.payerId) }} 支付</span>
-                            </div>
-                            <div class="flex items-center gap-6">
-                                <div class="text-right">
-                                    <div class="text-lg font-bold text-blue-600">${{ r.amount }}</div>
-                                    <div class="text-[10px] text-gray-400">{{ r.participantIds.length }} 人均分</div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 min-h-[600px]">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-black text-gray-700 flex items-center gap-2">
+                            <span class="w-1.5 h-5 bg-green-500 rounded-full"></span> 帳目流水帳
+                        </h3>
+                        <span class="text-xs text-gray-400 font-mono">共 {{ this.activeEvent.records.length }} 筆記錄</span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div v-for="(r, index) in this.activeEvent.records" :key="r.id" class="p-5 border border-gray-100 rounded-2xl hover:border-blue-200 hover:shadow-lg hover:shadow-blue-50/50 transition-all bg-white relative group">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div class="space-y-3">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-lg font-black text-gray-800 leading-none">{{ r.desc || '未命名項目' }}</span>
+                                        <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg font-black text-lg">${{ r.amount }}</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-2 text-sm text-gray-500">
+                                        <span class="px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded text-[10px] font-bold uppercase">Paid By</span>
+                                        <span class="font-bold text-gray-700">{{ this.getMemberName(r.payerId) }}</span>
+                                    </div>
+
+                                    <div class="flex flex-wrap items-center gap-2 pt-1">
+                                        <span class="px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded text-[10px] font-bold uppercase">Split With</span>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <span v-for="pId in r.participantIds" :key="pId" 
+                                                class="text-[11px] bg-green-50 text-green-600 border border-green-100 px-2.5 py-0.5 rounded-full font-bold">
+                                                {{ this.getMemberName(pId) }}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <button @click="this.deleteRecord(index)" class="text-gray-300 hover:text-red-500 px-2 text-xl">×</button>
+
+                                <div class="flex items-center gap-4 self-end md:self-center">
+                                    <div class="text-right border-l pl-4 border-gray-100">
+                                        <div class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Per Person</div>
+                                        <div class="text-lg font-black text-gray-600">${{ Math.round(r.amount / r.participantIds.length) }}</div>
+                                    </div>
+                                    <button @click="this.deleteRecord(index)" class="text-gray-200 hover:text-red-500 text-2xl px-2 transition-colors">✕</button>
+                                </div>
                             </div>
                         </div>
-                        <div v-if="this.activeEvent.records.length === 0" class="text-center py-20 text-gray-300">目前沒有帳目</div>
+
+                        <div v-if="this.activeEvent.records.length === 0" class="flex flex-col items-center justify-center py-32 text-gray-300">
+                            <div class="text-5xl mb-4">📝</div>
+                            <div class="font-bold">目前尚無帳目紀錄</div>
+                            <div class="text-sm">在左側輸入第一筆支出吧！</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -102,12 +156,26 @@
 
         createApp({
             data() {
-                const savedEvents = JSON.parse(localStorage.getItem('expense-app-data'));
+                const storageKey = 'shared-bill-pro-v3';
+                const savedData = JSON.parse(localStorage.getItem(storageKey));
+                
+                // 預設初始資料
+                const defaultEvents = [
+                    { 
+                        id: Date.now(), 
+                        name: '我的新活動', 
+                        members: [
+                            { id: 1, name: '成員 A' },
+                            { id: 2, name: '成員 B' }
+                        ], 
+                        records: [] 
+                    }
+                ];
+
                 return {
-                    events: savedEvents || [
-                        { id: Date.now(), name: '活動一', members: [{id:1, name:'成員1'}], records: [] }
-                    ],
-                    currentEventId: savedEvents ? savedEvents[0].id : null,
+                    storageKey,
+                    events: savedData || defaultEvents,
+                    currentEventId: savedData ? savedData[0].id : defaultEvents[0].id,
                     newMemberName: '',
                     newRecord: { amount: null, desc: '', payerId: null, participantIds: [] }
                 }
@@ -120,40 +188,59 @@
             watch: {
                 events: {
                     handler(val) {
-                        localStorage.setItem('expense-app-data', JSON.stringify(val));
+                        localStorage.setItem(this.storageKey, JSON.stringify(val));
                     },
                     deep: true
                 },
-                currentEventId(newVal) {
-                    if (this.activeEvent && this.activeEvent.members.length > 0) {
-                        this.newRecord.payerId = this.activeEvent.members[0].id;
-                        this.newRecord.participantIds = this.activeEvent.members.map(m => m.id);
+                currentEventId: {
+                    immediate: true,
+                    handler() {
+                        this.resetForm();
                     }
                 }
             },
             methods: {
+                resetForm() {
+                    if (this.activeEvent && this.activeEvent.members.length > 0) {
+                        this.newRecord.payerId = this.activeEvent.members[0].id;
+                        this.newRecord.participantIds = this.activeEvent.members.map(m => m.id);
+                    }
+                },
+                renameEvent(event) {
+                    const n = prompt('修改活動名稱：', event.name);
+                    if (n && n.trim()) event.name = n.trim();
+                },
+                renameMember(member) {
+                    const n = prompt('修改成員姓名：', member.name);
+                    if (n && n.trim()) member.name = n.trim();
+                },
                 addNewEvent() {
-                    const name = prompt('請輸入新活動名稱：');
-                    if (name) {
-                        const newId = Date.now();
-                        this.events.push({ id: newId, name, members: [], records: [] });
-                        this.currentEventId = newId;
+                    const n = prompt('新活動名稱：', '新活動');
+                    if (n) {
+                        const id = Date.now();
+                        this.events.push({ id, name: n, members: [], records: [] });
+                        this.currentEventId = id;
                     }
                 },
                 deleteEvent() {
-                    if (confirm(`確定要刪除「${this.activeEvent.name}」嗎？所有資料將消失。`)) {
+                    if (this.events.length <= 1) return alert('請至少保留一個活動');
+                    if (confirm(`確定刪除「${this.activeEvent.name}」？`)) {
                         this.events = this.events.filter(e => e.id !== this.currentEventId);
-                        if (this.events.length > 0) this.currentEventId = this.events[0].id;
+                        this.currentEventId = this.events[0].id;
                     }
                 },
                 addMember() {
                     if (this.newMemberName.trim()) {
-                        const mId = Date.now();
-                        this.activeEvent.members.push({ id: mId, name: this.newMemberName });
+                        const id = Date.now();
+                        this.activeEvent.members.push({ id, name: this.newMemberName });
                         this.newMemberName = '';
-                        // 更新表單預設選擇
-                        if (!this.newRecord.payerId) this.newRecord.payerId = mId;
-                        this.newRecord.participantIds.push(mId);
+                        this.resetForm();
+                    }
+                },
+                deleteMember(mId) {
+                    if (confirm('移除成員會影響帳目計算，確定嗎？')) {
+                        this.activeEvent.members = this.activeEvent.members.filter(m => m.id !== mId);
+                        this.resetForm();
                     }
                 },
                 toggleParticipant(id) {
@@ -165,6 +252,8 @@
                         this.activeEvent.records.unshift({ id: Date.now(), ...JSON.parse(JSON.stringify(this.newRecord)) });
                         this.newRecord.amount = null;
                         this.newRecord.desc = '';
+                    } else {
+                        alert('請填寫金額並選擇分擔成員');
                     }
                 },
                 deleteRecord(index) {
@@ -172,24 +261,19 @@
                 },
                 getMemberName(id) {
                     const m = this.activeEvent.members.find(m => m.id === id);
-                    return m ? m.name : '未知';
+                    return m ? m.name : '已退出';
                 },
                 calculateBalance(memberId) {
-                    let balance = 0;
+                    let b = 0;
                     this.activeEvent.records.forEach(r => {
-                        if (r.payerId === memberId) balance += r.amount;
-                        if (r.participantIds.includes(memberId)) balance -= (r.amount / r.participantIds.length);
+                        if (r.payerId === memberId) b += r.amount;
+                        if (r.participantIds.includes(memberId)) b -= (r.amount / r.participantIds.length);
                     });
-                    return Math.round(balance);
+                    return Math.round(b);
                 },
                 getBalanceClass(id) {
                     const b = this.calculateBalance(id);
                     return b > 0 ? 'text-green-500' : (b < 0 ? 'text-red-500' : 'text-gray-300');
-                }
-            },
-            mounted() {
-                if (!this.currentEventId && this.events.length > 0) {
-                    this.currentEventId = this.events[0].id;
                 }
             }
         }).mount('#app');
