@@ -3,87 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>共同記帳 Web App</title>
+    <title>活動分頁記帳 App</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 p-4 md:p-8">
-    <div id="app" class="max-w-4xl mx-auto">
-        <h1 class="text-3xl font-bold text-center mb-8 text-blue-600">共同記帳系統</h1>
+<body class="bg-gray-50 p-4">
+    <div id="app" class="max-w-5xl mx-auto">
+        <div class="flex items-center gap-4 mb-6 overflow-x-auto pb-2">
+            <button v-for="event in this.events" :key="event.id"
+                @click="this.currentEventId = event.id"
+                :class="this.currentEventId === event.id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border'"
+                class="px-4 py-2 rounded-lg shadow-sm whitespace-nowrap transition">
+                {{ event.name }}
+            </button>
+            <button @click="this.addNewEvent" class="bg-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300">+</button>
+        </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="md:col-span-1 space-y-6">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h2 class="text-xl font-semibold mb-4">成員管理</h2>
-                    <div class="flex mb-4">
-                        <input v-model="this.newMemberName" type="text" placeholder="成員姓名" class="border p-2 rounded-l w-full outline-none focus:border-blue-500">
-                        <button @click="this.addMember" class="bg-blue-500 text-white px-4 py-2 rounded-r hover:bg-blue-600">加入</button>
+        <div v-if="this.activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-4 space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold italic">{{ this.activeEvent.name }}</h2>
+                        <button @click="this.deleteEvent" class="text-red-400 text-xs hover:underline">刪除此活動</button>
                     </div>
-                    <ul class="space-y-2">
-                        <li v-for="m in this.members" :key="m.id" class="flex justify-between items-center bg-gray-50 p-2 rounded">
+
+                    <div class="flex mb-4">
+                        <input v-model="this.newMemberName" type="text" placeholder="新增成員" class="border p-2 rounded-l w-full text-sm">
+                        <button @click="this.addMember" class="bg-blue-500 text-white px-4 py-2 rounded-r hover:bg-blue-600">加</button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div v-for="m in this.activeEvent.members" :key="m.id" class="flex justify-between p-2 bg-gray-50 rounded">
                             <span>{{ m.name }}</span>
-                            <span :class="this.getBalanceClass(m.id)" class="font-mono font-bold">
+                            <span :class="this.getBalanceClass(m.id)" class="font-bold">
                                 {{ this.calculateBalance(m.id) }}
                             </span>
-                        </li>
-                    </ul>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h2 class="text-xl font-semibold mb-4">新增帳目</h2>
+                <div class="bg-white p-6 rounded-xl shadow-sm border">
+                    <h3 class="font-bold mb-4">新增支出</h3>
                     <div class="space-y-4">
                         <input v-model.number="this.newRecord.amount" type="number" placeholder="金額" class="border p-2 rounded w-full">
-                        <input v-model="this.newRecord.desc" type="text" placeholder="用途 (例如: 晚餐)" class="border p-2 rounded w-full">
+                        <input v-model="this.newRecord.desc" type="text" placeholder="項目內容" class="border p-2 rounded w-full">
                         
                         <div>
-                            <label class="block text-sm text-gray-600 mb-1">誰先墊錢？</label>
-                            <select v-model="this.newRecord.payerId" class="border p-2 rounded w-full">
-                                <option v-for="m in this.members" :value="m.id">{{ m.name }}</option>
+                            <label class="text-xs text-gray-500">誰付的錢？</label>
+                            <select v-model="this.newRecord.payerId" class="border p-2 rounded w-full bg-white">
+                                <option v-for="m in this.activeEvent.members" :value="m.id">{{ m.name }}</option>
                             </select>
                         </div>
 
                         <div>
-                            <label class="block text-sm text-gray-600 mb-1">誰要分擔？</label>
-                            <div class="flex flex-wrap gap-2">
-                                <button v-for="m in this.members" 
+                            <label class="text-xs text-gray-500">誰要分擔？</label>
+                            <div class="flex flex-wrap gap-2 mt-1">
+                                <button v-for="m in this.activeEvent.members" 
                                     @click="this.toggleParticipant(m.id)"
-                                    :class="this.newRecord.participantIds.includes(m.id) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'"
-                                    class="px-3 py-1 rounded-full text-sm transition">
+                                    :class="this.newRecord.participantIds.includes(m.id) ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-400 border-gray-200'"
+                                    class="px-3 py-1 rounded-full text-xs border transition">
                                     {{ m.name }}
                                 </button>
                             </div>
                         </div>
 
-                        <button @click="this.addRecord" class="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">送出帳目</button>
+                        <button @click="this.addRecord" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow-lg shadow-blue-200">記錄一筆</button>
                     </div>
                 </div>
             </div>
 
-            <div class="md:col-span-2">
-                <div class="bg-white p-6 rounded-lg shadow min-h-full">
-                    <h2 class="text-xl font-semibold mb-4">帳目明細</h2>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="border-b">
-                                    <th class="py-2">描述</th>
-                                    <th class="py-2">總額</th>
-                                    <th class="py-2">墊錢人</th>
-                                    <th class="py-2">分擔成員</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="r in this.records" :key="r.id" class="border-b hover:bg-gray-50 text-sm">
-                                    <td class="py-3">{{ r.desc }}</td>
-                                    <td class="py-3 font-bold">${{ r.amount }}</td>
-                                    <td class="py-3 text-blue-600">{{ this.getMemberName(r.payerId) }}</td>
-                                    <td class="py-3 text-gray-500 text-xs">
-                                        {{ r.participantIds.map(id => this.getMemberName(id)).join(', ') }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <div v-if="this.records.length === 0" class="text-center text-gray-400 py-10">尚無帳目記錄</div>
+            <div class="lg:col-span-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border min-h-[400px]">
+                    <h3 class="font-bold mb-4">帳目流水帳</h3>
+                    <div class="space-y-3">
+                        <div v-for="(r, index) in this.activeEvent.records" :key="r.id" class="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition">
+                            <div class="flex flex-col">
+                                <span class="font-bold text-gray-800">{{ r.desc }}</span>
+                                <span class="text-xs text-gray-400 italic">由 {{ this.getMemberName(r.payerId) }} 支付</span>
+                            </div>
+                            <div class="flex items-center gap-6">
+                                <div class="text-right">
+                                    <div class="text-lg font-bold text-blue-600">${{ r.amount }}</div>
+                                    <div class="text-[10px] text-gray-400">{{ r.participantIds.length }} 人均分</div>
+                                </div>
+                                <button @click="this.deleteRecord(index)" class="text-gray-300 hover:text-red-500 px-2 text-xl">×</button>
+                            </div>
+                        </div>
+                        <div v-if="this.activeEvent.records.length === 0" class="text-center py-20 text-gray-300">目前沒有帳目</div>
                     </div>
                 </div>
             </div>
@@ -95,72 +102,94 @@
 
         createApp({
             data() {
+                const savedEvents = JSON.parse(localStorage.getItem('expense-app-data'));
                 return {
-                    members: [
-                        { id: 1, name: '小明' },
-                        { id: 2, name: '小華' }
+                    events: savedEvents || [
+                        { id: Date.now(), name: '活動一', members: [{id:1, name:'成員1'}], records: [] }
                     ],
-                    records: [],
+                    currentEventId: savedEvents ? savedEvents[0].id : null,
                     newMemberName: '',
-                    newRecord: {
-                        amount: null,
-                        desc: '',
-                        payerId: 1,
-                        participantIds: [1, 2]
+                    newRecord: { amount: null, desc: '', payerId: null, participantIds: [] }
+                }
+            },
+            computed: {
+                activeEvent() {
+                    return this.events.find(e => e.id === this.currentEventId);
+                }
+            },
+            watch: {
+                events: {
+                    handler(val) {
+                        localStorage.setItem('expense-app-data', JSON.stringify(val));
+                    },
+                    deep: true
+                },
+                currentEventId(newVal) {
+                    if (this.activeEvent && this.activeEvent.members.length > 0) {
+                        this.newRecord.payerId = this.activeEvent.members[0].id;
+                        this.newRecord.participantIds = this.activeEvent.members.map(m => m.id);
                     }
                 }
             },
             methods: {
+                addNewEvent() {
+                    const name = prompt('請輸入新活動名稱：');
+                    if (name) {
+                        const newId = Date.now();
+                        this.events.push({ id: newId, name, members: [], records: [] });
+                        this.currentEventId = newId;
+                    }
+                },
+                deleteEvent() {
+                    if (confirm(`確定要刪除「${this.activeEvent.name}」嗎？所有資料將消失。`)) {
+                        this.events = this.events.filter(e => e.id !== this.currentEventId);
+                        if (this.events.length > 0) this.currentEventId = this.events[0].id;
+                    }
+                },
                 addMember() {
                     if (this.newMemberName.trim()) {
-                        this.members.push({
-                            id: Date.now(),
-                            name: this.newMemberName
-                        });
+                        const mId = Date.now();
+                        this.activeEvent.members.push({ id: mId, name: this.newMemberName });
                         this.newMemberName = '';
+                        // 更新表單預設選擇
+                        if (!this.newRecord.payerId) this.newRecord.payerId = mId;
+                        this.newRecord.participantIds.push(mId);
                     }
                 },
                 toggleParticipant(id) {
-                    const index = this.newRecord.participantIds.indexOf(id);
-                    if (index > -1) {
-                        this.newRecord.participantIds.splice(index, 1);
-                    } else {
-                        this.newRecord.participantIds.push(id);
-                    }
+                    const idx = this.newRecord.participantIds.indexOf(id);
+                    idx > -1 ? this.newRecord.participantIds.splice(idx, 1) : this.newRecord.participantIds.push(id);
                 },
                 addRecord() {
                     if (this.newRecord.amount > 0 && this.newRecord.participantIds.length > 0) {
-                        this.records.unshift({
-                            id: Date.now(),
-                            ...JSON.parse(JSON.stringify(this.newRecord))
-                        });
+                        this.activeEvent.records.unshift({ id: Date.now(), ...JSON.parse(JSON.stringify(this.newRecord)) });
                         this.newRecord.amount = null;
                         this.newRecord.desc = '';
                     }
                 },
+                deleteRecord(index) {
+                    this.activeEvent.records.splice(index, 1);
+                },
                 getMemberName(id) {
-                    const member = this.members.find(m => m.id === id);
-                    return member ? member.name : 'Unknown';
+                    const m = this.activeEvent.members.find(m => m.id === id);
+                    return m ? m.name : '未知';
                 },
                 calculateBalance(memberId) {
                     let balance = 0;
-                    this.records.forEach(r => {
-                        // 如果是墊錢人，增加「應收」金額
-                        if (r.payerId === memberId) {
-                            balance += r.amount;
-                        }
-                        // 如果在承擔名單中，扣除「應付」金額 (總額 / 承擔人數)
-                        if (r.participantIds.includes(memberId)) {
-                            balance -= (r.amount / r.participantIds.length);
-                        }
+                    this.activeEvent.records.forEach(r => {
+                        if (r.payerId === memberId) balance += r.amount;
+                        if (r.participantIds.includes(memberId)) balance -= (r.amount / r.participantIds.length);
                     });
-                    return balance.toFixed(0);
+                    return Math.round(balance);
                 },
                 getBalanceClass(id) {
-                    const balance = this.calculateBalance(id);
-                    if (balance > 0) return 'text-green-600';
-                    if (balance < 0) return 'text-red-600';
-                    return 'text-gray-400';
+                    const b = this.calculateBalance(id);
+                    return b > 0 ? 'text-green-500' : (b < 0 ? 'text-red-500' : 'text-gray-300');
+                }
+            },
+            mounted() {
+                if (!this.currentEventId && this.events.length > 0) {
+                    this.currentEventId = this.events[0].id;
                 }
             }
         }).mount('#app');
