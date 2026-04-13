@@ -12,174 +12,268 @@
     <style>
         [v-cloak] { display: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .dark .shadow-xl, .dark .shadow-lg { box-shadow: none !important; }
-        html, body { transition: background-color 0.3s, color 0.3s; }
+        
+        /* 效能核心：硬體加速與渲染優化 */
+        #main-bg {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -2; object-fit: cover; 
+            will-change: transform; /* 強制 GPU */
+        }
+        
+        #main-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; pointer-events: none;
+            will-change: backdrop-filter, background-color;
+        }
+
+        /* 加強版玻璃卡片：提高不透明度以保護效能與可讀性 */
+        .glass-card {
+            background-color: rgba(255, 255, 255, 0.94) !important;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            /* 分層式輕量陰影，不卡死 GPU */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .dark .glass-card {
+            background-color: rgba(15, 23, 42, 0.94) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2) !important;
+        }
+
+        /* 修正按鈕在深色模式下的陰影問題 */
+        .btn-shadow {
+            box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.39);
+        }
+        .dark .btn-shadow {
+            box-shadow: none !important;
+            border: 1px solid rgba(59, 130, 246, 0.5);
+        }
+
+        /* 裁切視窗優化 */
+        #cropper-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #cropper-container { width: 90%; max-width: 600px; height: 60vh; background: #000; position: relative; overflow: hidden; border-radius: 32px; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+        #cropper-image { position: absolute; cursor: move; touch-action: none; }
+        #cropper-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 3px solid #3b82f6; box-shadow: 0 0 0 9999px rgba(0,0,0,0.7); pointer-events: none; }
+        
+        html, body { transition: background-color 0.3s; height: 100%; }
     </style>
 </head>
-<body class="min-h-screen text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 font-sans">
-    <div id="app" v-cloak class="max-w-6xl mx-auto p-4 md:p-6">
-        
-        <div v-if="!user" class="flex items-center justify-center min-h-[80vh] fade-in">
-            <div class="bg-white dark:bg-slate-900 p-10 rounded-[2.5rem] shadow-2xl dark:shadow-none w-full max-w-md border border-slate-100 dark:border-slate-800 text-center text-slate-700 dark:text-slate-300">
-                <h2 class="text-3xl font-black text-blue-600 dark:text-blue-400 mb-2">雲端同步記帳</h2>
-                <div class="space-y-4 mt-8">
-                    <input v-model="authFields.email" type="email" placeholder="電子郵件" class="w-full p-4 border rounded-2xl outline-none dark:bg-slate-800 dark:border-slate-700 text-center">
-                    <input v-model="authFields.password" type="password" placeholder="密碼" class="w-full p-4 border rounded-2xl outline-none dark:bg-slate-800 dark:border-slate-700 text-center">
-                    <div class="grid grid-cols-2 gap-3 pt-4">
-                        <button @click="handleLogin" class="bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg dark:shadow-none">登入</button>
-                        <button @click="handleRegister" class="bg-slate-100 dark:bg-slate-800 text-slate-500 py-4 rounded-2xl font-bold border dark:border-slate-700">註冊</button>
-                    </div>
-                </div>
+<body class="min-h-screen font-sans relative text-slate-900 dark:text-slate-100 selection:bg-blue-100">
+    
+    <img id="main-bg" src="" style="display: none;">
+    
+    <div id="app" v-cloak>
+        <div id="main-overlay" :style="overlayStyle"></div>
+
+        <div id="cropper-overlay" v-if="croppingImage" class="fade-in">
+            <div id="cropper-container" @mousedown="startDrag" @mousemove="onDrag" @mouseup="endDrag" @mouseleave="endDrag" @touchstart="startTouch" @touchmove="onTouchMove" @touchend="endTouch">
+                <img :src="croppingImage" id="cropper-image" ref="cropperImage" :style="cropperImageStyle">
+                <div id="cropper-box" :style="cropperBoxStyle"></div>
+            </div>
+            <div class="flex gap-4 mt-8">
+                <button @click="croppingImage = null" class="px-10 py-3 bg-slate-800 text-white rounded-2xl font-bold border border-slate-700 hover:bg-slate-700 transition">取消</button>
+                <button @click="confirmCrop" class="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-xl active:scale-95 transition">確認裁切</button>
             </div>
         </div>
 
-        <div v-else class="space-y-6 fade-in">
-            <header class="flex flex-wrap justify-between items-center bg-white dark:bg-slate-900 px-6 py-4 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800 gap-4">
-                <div class="flex items-center gap-4">
-                    <div class="bg-gradient-to-br from-blue-500 to-blue-700 text-white w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl shadow-lg">
-                        {{ userNickname[0] || '?' }}
+        <div class="max-w-6xl mx-auto p-4 md:p-6 relative z-10">
+            
+            <div v-if="!user" class="flex items-center justify-center min-h-[85vh] fade-in">
+                <div class="glass-card p-12 rounded-[3.5rem] w-full max-w-md text-center border">
+                    <div class="w-20 h-20 bg-blue-600 rounded-[2rem] mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-blue-500/30">
+                        <span class="text-white text-4xl font-black italic">$</span>
                     </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <span class="font-black text-lg">{{ userNickname }}</span>
-                            <button @click="updateNickname" class="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-md border dark:border-slate-700">修改</button>
+                    <h2 class="text-3xl font-black mb-2 tracking-tighter">記帳系統</h2>
+                    <p class="text-slate-400 mb-10 text-sm font-medium">帥帥 · 乞丐 · 扣扣</p>
+                    <div class="space-y-4">
+                        <input v-model="authFields.email" type="email" placeholder="電子郵件" class="w-full p-4 border dark:border-slate-700 rounded-2xl outline-none dark:bg-slate-800/50 text-center focus:ring-2 focus:ring-blue-500 transition-all">
+                        <input v-model="authFields.password" type="password" placeholder="密碼" class="w-full p-4 border dark:border-slate-700 rounded-2xl outline-none dark:bg-slate-800/50 text-center focus:ring-2 focus:ring-blue-500 transition-all">
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <button @click="handleLogin" class="bg-blue-600 text-white py-4 rounded-2xl font-black btn-shadow hover:bg-blue-700 transition active:scale-95">登入</button>
+                            <button @click="handleRegister" class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-4 rounded-2xl font-bold border dark:border-slate-700 hover:bg-slate-200 transition">註冊</button>
                         </div>
-                        <p class="text-[10px] text-slate-400 font-mono tracking-tighter">{{ user.email }}</p>
                     </div>
                 </div>
-                
-                <div class="flex items-center gap-4">
-                    <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border dark:border-slate-700">
-                        <button @click="setAppearance('light')" :class="appearance === 'light' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all">淺色</button>
-                        <button @click="setAppearance('dark')" :class="appearance === 'dark' ? 'bg-slate-700 text-blue-400 shadow-sm' : 'text-slate-400'" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all">深色</button>
-                        <button @click="setAppearance('auto')" :class="appearance === 'auto' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-400'" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all">自動</button>
-                    </div>
-                    <button @click="handleLogout" class="px-5 py-2 border border-red-50 text-red-400 rounded-xl text-sm font-bold hover:bg-red-50 transition">登出</button>
-                </div>
-            </header>
-
-            <div v-if="sharedEvents.length === 0" class="flex flex-col items-center justify-center py-24 bg-white dark:bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800 fade-in text-center">
-                <div class="text-7xl mb-6">⛺</div>
-                <h3 class="text-2xl font-black mb-2">點擊按鈕開始記帳</h3>
-                <button @click="addNewEvent" class="mt-8 bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-lg shadow-xl dark:shadow-none hover:scale-105 transition-transform">+ 建立活動</button>
             </div>
 
             <div v-else class="space-y-6">
+                <header class="flex flex-wrap justify-between items-center glass-card px-8 py-5 rounded-[2.5rem] gap-6">
+                    <div class="flex items-center gap-5">
+                        <div @click="triggerAvatarUpload" class="relative w-16 h-16 cursor-pointer overflow-hidden rounded-[1.2rem] border-4 border-white dark:border-slate-700 shadow-xl group transition-transform hover:scale-105 active:scale-95">
+                            <img v-if="customAvatarUrl" :src="customAvatarUrl" class="w-full h-full object-cover">
+                            <div v-else class="bg-gradient-to-br from-blue-500 to-blue-700 text-white w-full h-full flex items-center justify-center font-black text-2xl"> {{ userNickname[0] }} </div>
+                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold">更換圖</div>
+                            <input type="file" ref="avatarInput" @change="onFileChange($event, 'avatar')" accept="image/*" class="hidden">
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <span class="font-black text-2xl tracking-tighter">{{ userNickname }}</span>
+                                <button @click="updateNickname" class="px-2 py-0.5 text-[10px] bg-blue-50 dark:bg-blue-900/40 text-blue-500 rounded-lg font-bold">修改名稱</button>
+                            </div>
+                            <p class="text-[10px] text-slate-400 font-mono tracking-widest mt-1 opacity-70">{{ user.email }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div class="flex items-center gap-5 bg-slate-200/40 dark:bg-black/40 p-3 px-6 rounded-2xl border border-white/20">
+                            <div class="flex items-center gap-3">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">模糊</label>
+                                <input type="range" v-model.number="bgBlur" min="0" max="25" class="w-20 h-1 accent-blue-600 cursor-pointer">
+                            </div>
+                            <div class="flex items-center gap-3 border-l border-slate-300 dark:border-slate-700 pl-5">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">亮度</label>
+                                <input type="range" v-model.number="bgOpacity" min="0" max="85" class="w-20 h-1 accent-blue-600 cursor-pointer">
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <button @click="setAppearance('light')" :class="appearance === 'light' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'" class="px-3 py-2 text-xs font-bold rounded-xl border dark:border-slate-700 transition">淺</button>
+                            <button @click="setAppearance('dark')" :class="appearance === 'dark' ? 'bg-slate-800 text-blue-400 shadow-md' : 'text-slate-400'" class="px-3 py-2 text-xs font-bold rounded-xl border dark:border-slate-700 transition">深</button>
+                            <div class="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-2"></div>
+                            <button @click="triggerBgUpload" class="text-xs bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black btn-shadow hover:bg-blue-700 transition active:scale-95">更換背景</button>
+                            <button v-if="hasCustomBg" @click="deleteBackground" class="text-red-500 font-bold px-2 transition-transform hover:scale-125">✕</button>
+                            <input type="file" ref="bgInput" @change="onFileChange($event, 'background')" accept="image/*" class="hidden">
+                        </div>
+                        <button @click="handleLogout" class="text-xs text-slate-400 font-bold hover:text-red-400 transition ml-2">登出</button>
+                    </div>
+                </header>
+
                 <nav class="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2">
                     <button v-for="ev in sharedEvents" :key="ev.id" @click="currentEventId = ev.id"
-                        :class="currentEventId === ev.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800'"
-                        class="px-6 py-3 rounded-2xl font-bold text-sm shrink-0 transition-all duration-300">
+                        :class="currentEventId === ev.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20 scale-105' : 'glass-card text-slate-500 border-transparent'"
+                        class="px-8 py-4 rounded-[1.8rem] font-black text-sm shrink-0 transition-all active:scale-95">
                         {{ ev.name }}
                     </button>
-                    <button @click="addNewEvent" class="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-5 py-3 rounded-2xl font-black text-xl hover:bg-blue-100 transition shrink-0 border dark:border-blue-900/50">+</button>
+                    <button @click="addNewEvent" class="glass-card text-blue-600 px-6 py-4 rounded-[1.8rem] font-black text-xl hover:bg-blue-50 transition active:scale-90 shadow-none border-dashed border-2 border-blue-200">+</button>
                 </nav>
 
-                <div v-if="activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div v-if="activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                     <aside class="lg:col-span-4 space-y-6">
-                        <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
-                            <div class="flex justify-between items-center mb-6">
-                                <h2 @click="isAdmin ? renameEvent(activeEvent) : null" class="text-2xl font-black cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg px-2">
-                                    {{ activeEvent.name }} <span v-if="isAdmin" class="text-slate-200 dark:text-slate-600 text-xs font-normal">✎</span>
+                        <div class="glass-card p-7 rounded-[2.8rem]">
+                            <div class="flex justify-between items-center mb-8">
+                                <h2 @click="isAdmin ? renameEvent(activeEvent) : null" class="text-2xl font-black cursor-pointer group flex items-center gap-2 tracking-tighter">
+                                    {{ activeEvent.name }} <span v-if="isAdmin" class="text-blue-400 opacity-20 group-hover:opacity-100 transition">✎</span>
                                 </h2>
-                                <span class="text-[9px] bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-2 py-1 rounded-full font-bold uppercase tracking-widest">{{ isAdmin ? '管理員' : '成員' }}</span>
+                                <span class="text-[9px] bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full font-black uppercase tracking-widest border border-blue-200 dark:border-blue-800">{{ isAdmin ? 'Admin' : 'User' }}</span>
                             </div>
-
                             <div class="space-y-4">
-                                <h3 class="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase px-1">成員餘額</h3>
-                                <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-                                    <div v-for="m in activeMembers" :key="m.id" class="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-white dark:border-slate-800">
-                                        <div class="flex flex-col">
-                                            <span class="font-bold text-sm">{{ m.displayName }}</span>
-                                            <div class="flex gap-2 text-[9px] mt-0.5">
-                                                <span v-if="activeEvent.admins.includes(m.id)" class="text-blue-500 font-bold">管理員</span>
-                                                <button v-if="isAdmin && m.id !== user.email" @click="removeMember(m)" class="text-red-300 hover:text-red-500 transition-colors">移除</button>
+                                <div class="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
+                                    <div v-for="m in activeMembers" :key="m.id" class="flex justify-between items-center p-4 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl border border-white/40 transition hover:scale-[1.02]">
+                                        <div class="flex items-center gap-4">
+                                            <div class="w-12 h-12 rounded-xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md shrink-0">
+                                                <img v-if="allProfiles[m.id]?.avatar" :src="allProfiles[m.id].avatar" class="w-full h-full object-cover">
+                                                <div v-else class="bg-slate-100 dark:bg-slate-800 w-full h-full flex items-center justify-center font-bold text-slate-400">{{ m.displayName[0] }}</div>
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <span class="font-black text-sm text-slate-800 dark:text-slate-100">{{ m.displayName }}</span>
+                                                <div class="flex gap-2 text-[9px] mt-1 font-black uppercase tracking-tighter">
+                                                    <span v-if="activeEvent.admins.includes(m.id)" class="text-blue-500">管理員</span>
+                                                    <button v-if="isAdmin && !activeEvent.admins.includes(m.id) && m.type === 'auth'" @click="makeAdmin(m.id)" class="text-blue-400 hover:underline">轉讓管理</button>
+                                                    <button v-if="isAdmin && m.id !== user.email" @click="removeMember(m)" class="text-red-400 hover:underline">移除</button>
+                                                </div>
                                             </div>
                                         </div>
-                                        <span :class="getBalanceClass(m.id)" class="font-mono font-black text-lg">${{ calculateBalance(m.id) }}</span>
+                                        <span :class="getBalanceClass(m.id)" class="font-mono font-black text-xl tracking-tighter">${{ calculateBalance(m.id) }}</span>
                                     </div>
                                 </div>
-                                <div v-if="isAdmin" class="pt-4 border-t border-slate-50 dark:border-slate-800 space-y-3 text-slate-700 dark:text-slate-300">
+                                <div v-if="isAdmin" class="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-3">
                                     <div class="flex gap-2">
-                                        <input v-model="inviteEmail" @keyup.enter="inviteMember" placeholder="邀請註冊 Email" class="flex-1 bg-slate-100 dark:bg-slate-800 text-xs p-3 rounded-xl outline-none border dark:border-slate-700">
-                                        <button @click="inviteMember" class="bg-blue-600 text-white px-4 rounded-xl text-xs font-bold">確定邀請</button>
+                                        <input v-model="inviteEmail" placeholder="邀請註冊 Email..." class="flex-1 text-xs p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none border-none focus:ring-2 focus:ring-blue-500 transition-all text-center">
+                                        <button @click="inviteMember" class="bg-blue-600 text-white px-5 rounded-2xl text-xs font-black shadow-lg shadow-blue-500/20 active:scale-95 transition">邀請確定</button>
                                     </div>
                                     <div class="flex gap-2">
-                                        <input v-model="newManualName" @keyup.enter="addManualMember" placeholder="手動加人 (虛擬)" class="flex-1 bg-slate-100 dark:bg-slate-800 text-xs p-3 rounded-xl outline-none border dark:border-slate-700">
-                                        <button @click="addManualMember" class="bg-green-600 text-white px-4 rounded-xl text-xs font-bold">確定新增</button>
+                                        <input v-model="newManualName" placeholder="新增手動成員..." class="flex-1 text-xs p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none border-none focus:ring-2 focus:ring-green-500 transition-all text-center">
+                                        <button @click="addManualMember" class="bg-green-600 text-white px-5 rounded-2xl text-xs font-black shadow-lg shadow-green-500/20 active:scale-95 transition">新增確定</button>
                                     </div>
-                                    <button @click="deleteEvent" class="w-full mt-2 py-2 text-red-300 text-[10px] font-bold uppercase tracking-widest border border-red-100 dark:border-red-900/30 rounded-xl hover:bg-red-50 transition">❌ 刪除活動</button>
+                                    <button @click="deleteEvent" class="w-full mt-4 py-3 text-red-400 text-[10px] font-black border border-red-100 dark:border-red-900/30 rounded-2xl hover:bg-red-50 transition uppercase tracking-widest">❌ 刪除整個活動帳本</button>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden">
-                            <div v-if="editingRecordId" class="absolute top-0 left-0 w-full bg-blue-500 text-white text-[10px] font-bold text-center py-1">正在編輯帳目</div>
-                            <div class="flex justify-between items-center mb-6">
-                                <h3 class="font-black text-slate-300 dark:text-slate-600 text-[10px] tracking-widest uppercase italic">New Entry</h3>
-                                <button @click="splitMode = (splitMode === 'equal' ? 'custom' : 'equal')" class="text-[10px] font-bold text-blue-500 hover:underline">模式：{{ splitMode === 'equal' ? '均分' : '自訂' }}</button>
+                        <div class="glass-card p-9 rounded-[2.8rem] relative overflow-hidden">
+                            <div v-if="editingRecordId" class="absolute top-0 left-0 w-full bg-blue-500 text-white text-[10px] font-black text-center py-1.5 uppercase tracking-widest">Editing Mode</div>
+                            <div class="flex justify-between items-center mb-8">
+                                <h3 class="font-black text-slate-400 text-xs tracking-widest uppercase italic opacity-60">Add Entry</h3>
+                                <button @click="splitMode = (splitMode === 'equal' ? 'custom' : 'equal')" class="text-[10px] font-black text-blue-500 hover:underline">模式：{{ splitMode === 'equal' ? '均分' : '自訂金額' }}</button>
                             </div>
-                            <div class="space-y-4">
+                            <div class="space-y-6">
                                 <div class="relative">
-                                    <span class="absolute left-4 top-3.5 text-slate-300 font-bold">$</span>
-                                    <input v-model.number="newRecord.amount" type="number" placeholder="0" class="w-full p-4 pl-10 border rounded-2xl text-3xl font-black text-blue-600 dark:text-blue-400 outline-none bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-700 focus:border-blue-400">
+                                    <span class="absolute left-6 top-5 text-slate-300 font-bold text-2xl">$</span>
+                                    <input v-model.number="newRecord.amount" type="number" placeholder="0" class="w-full p-6 pl-12 rounded-[2rem] text-4xl font-black text-blue-600 dark:text-blue-400 outline-none bg-slate-100 dark:bg-slate-800 border-transparent focus:bg-white transition-all shadow-inner">
                                 </div>
-                                <input v-model="newRecord.desc" type="text" placeholder="描述（如：晚餐）" class="w-full p-4 border rounded-2xl text-sm outline-none dark:bg-slate-800 border-slate-100 dark:border-slate-700 focus:border-blue-400 text-slate-700 dark:text-slate-300">
-                                <div class="space-y-1">
-                                    <label class="text-[9px] font-bold text-slate-300 uppercase ml-2">付款人</label>
-                                    <select v-model="newRecord.payerId" class="w-full p-4 border rounded-2xl text-sm bg-white dark:bg-slate-800 font-bold border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                                <input v-model="newRecord.desc" type="text" placeholder="這筆錢花在哪裡？" class="w-full p-4 border dark:border-slate-700 rounded-2xl text-sm outline-none bg-slate-100 dark:bg-slate-800 focus:bg-white transition">
+                                <div class="space-y-2">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase ml-3">誰先付的錢？</label>
+                                    <select v-model="newRecord.payerId" class="w-full p-4 border dark:border-slate-700 rounded-2xl text-sm bg-slate-100 dark:bg-slate-800 font-black cursor-pointer focus:bg-white transition">
                                         <option v-for="m in activeMembers" :value="m.id">{{ m.displayName }}</option>
                                     </select>
                                 </div>
-                                <div class="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-50 dark:border-slate-800 space-y-3 text-slate-700 dark:text-slate-300">
-                                    <p class="text-[9px] font-bold text-slate-300 uppercase text-center">分攤成員</p>
-                                    <div v-for="m in activeMembers" :key="m.id" class="flex items-center gap-3">
-                                        <input type="checkbox" :checked="newRecord.splitData[m.id] !== undefined" @change="toggleSplitMember(m.id)" class="w-4 h-4 rounded text-blue-600">
-                                        <span class="text-xs font-bold flex-1">{{ m.displayName }}</span>
-                                        <div v-if="newRecord.splitData[m.id] !== undefined" class="w-20">
-                                            <input v-if="splitMode === 'custom'" v-model.number="newRecord.splitData[m.id]" type="number" class="w-full p-1 border rounded text-right text-xs font-bold text-blue-600 bg-white dark:bg-slate-800 outline-none">
-                                            <span v-else class="text-xs text-slate-400 block text-right font-mono italic text-[10px]">${{ Math.round(newRecord.amount / Object.keys(newRecord.splitData).length) || 0 }}</span>
+                                <div class="p-6 bg-slate-50/50 dark:bg-slate-950/60 rounded-[2.5rem] border border-white/20 space-y-4">
+                                    <p class="text-[9px] font-black text-slate-400 uppercase text-center tracking-[0.3em] opacity-60">分攤人員明細</p>
+                                    <div v-for="m in activeMembers" :key="m.id" class="flex items-center gap-5">
+                                        <input type="checkbox" :checked="newRecord.splitData[m.id] !== undefined" @change="toggleSplitMember(m.id)" class="w-5 h-5 rounded-lg border-slate-300 text-blue-600 cursor-pointer transition">
+                                        <span class="text-sm font-black flex-1 text-slate-700 dark:text-slate-300">{{ m.displayName }}</span>
+                                        <div v-if="newRecord.splitData[m.id] !== undefined" class="w-28">
+                                            <input v-if="splitMode === 'custom'" v-model.number="newRecord.splitData[m.id]" type="number" class="w-full p-2 border dark:border-slate-700 rounded-xl text-right text-sm text-blue-500 font-black bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-blue-400 transition">
+                                            <span v-else class="text-xs text-slate-400 block text-right font-mono italic opacity-60">${{ Math.round(newRecord.amount / Object.keys(newRecord.splitData).length) || 0 }}</span>
                                         </div>
                                     </div>
-                                    <div v-if="splitMode === 'custom'" class="text-[9px] text-right pt-2 border-t border-dashed border-slate-200 dark:border-slate-700" :class="customTotal === newRecord.amount ? 'text-green-500' : 'text-red-400'">總額: {{ customTotal }} / {{ newRecord.amount }}</div>
+                                    <div v-if="splitMode === 'custom'" class="text-[10px] text-right pt-2 border-t border-dashed border-slate-300 dark:border-slate-700 font-black" :class="customTotal === newRecord.amount ? 'text-green-500' : 'text-red-500'">
+                                        總計: {{ customTotal }} / {{ newRecord.amount }}
+                                    </div>
                                 </div>
-                                <div class="flex gap-2">
-                                    <button @click="addRecord" class="flex-1 bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all">{{ editingRecordId ? '完成編輯' : '儲存紀錄' }}</button>
-                                    <button v-if="editingRecordId" @click="cancelEdit" class="px-6 bg-slate-200 dark:bg-slate-700 rounded-2xl text-xs font-bold">取消</button>
+                                <div class="flex gap-4">
+                                    <button @click="addRecord" class="flex-1 bg-blue-600 text-white py-5 rounded-[2rem] font-black text-xl btn-shadow active:scale-95 transition-all hover:bg-blue-700">{{ editingRecordId ? '更新紀錄' : '儲存紀錄' }}</button>
+                                    <button v-if="editingRecordId" @click="cancelEdit" class="px-8 bg-slate-200 dark:bg-slate-700 rounded-[2rem] text-xs font-black text-slate-600 dark:text-slate-400">取消</button>
                                 </div>
                             </div>
                         </div>
                     </aside>
 
-                    <main class="lg:col-span-8">
-                        <div class="bg-white dark:bg-slate-900 p-8 rounded-[3rem] shadow-sm border border-slate-100 dark:border-slate-800 min-h-[600px] relative">
-                            <div v-if="activeEvent.records.length === 0" class="flex flex-col items-center justify-center py-40 text-slate-300 fade-in">
-                                <div class="text-6xl mb-6 opacity-30">📒</div>
-                                <h4 class="font-black text-slate-400 text-xl mb-2">尚未開始記帳</h4>
-                                <p class="text-sm">在左側輸入開銷，雲端將會即時同步成員。</p>
+                    <main class="lg:col-span-8 overflow-hidden">
+                        <div class="glass-card p-10 rounded-[3.5rem] min-h-[700px] relative">
+                            <h3 class="text-3xl font-black mb-12 flex items-center gap-5 tracking-tighter">
+                                <span class="w-3 h-12 bg-blue-600 rounded-full shadow-lg shadow-blue-500/40"></span> 
+                                流水帳紀錄
+                            </h3>
+                            <div v-if="activeEvent.records.length === 0" class="flex flex-col items-center justify-center py-56 text-slate-300 dark:text-slate-700 italic">
+                                <div class="text-8xl mb-8 opacity-20">📜</div>
+                                <h4 class="font-black text-2xl opacity-40">準備好記下第一筆開銷了嗎？</h4>
                             </div>
-                            <div v-else class="fade-in space-y-6">
-                                <h3 class="text-2xl font-black text-slate-800 dark:text-white mb-8 flex items-center gap-3"><span class="w-2 h-8 bg-blue-600 rounded-full"></span> 帳目流水帳</h3>
-                                <div class="space-y-4">
-                                    <div v-for="(r, index) in activeEvent.records" :key="r.id" class="p-6 border border-slate-50 dark:border-slate-800 rounded-[2.5rem] bg-white dark:bg-slate-900 hover:shadow-xl transition-all duration-300">
-                                        <div class="flex justify-between items-start text-slate-700 dark:text-slate-300">
-                                            <div class="space-y-4 flex-1">
-                                                <div class="flex items-center gap-4">
-                                                    <span class="text-xl font-black">{{ r.desc || '日常雜項' }}</span>
-                                                    <span class="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">${{ r.amount }}</span>
+                            <div v-else class="space-y-8">
+                                <div v-for="(r, index) in activeEvent.records" :key="r.id" class="p-8 bg-white/60 dark:bg-slate-900/50 rounded-[3rem] border border-white/50 dark:border-white/5 hover:bg-white dark:hover:bg-slate-800 transition-all duration-500 group shadow-sm hover:shadow-2xl hover:scale-[1.01]">
+                                    <div class="flex justify-between items-start gap-8">
+                                        <div class="flex-1 space-y-6">
+                                            <div class="flex items-center gap-6">
+                                                <div class="w-16 h-16 rounded-[1.5rem] overflow-hidden border-2 border-white dark:border-slate-700 shadow-xl shrink-0 transition-transform group-hover:rotate-3">
+                                                    <img v-if="allProfiles[r.payerId]?.avatar" :src="allProfiles[r.payerId].avatar" class="w-full h-full object-cover">
+                                                    <div v-else class="bg-blue-50 dark:bg-slate-800 w-full h-full flex items-center justify-center font-black text-2xl text-blue-500">{{ getDisplayName(r.payerId)[0] }}</div>
                                                 </div>
-                                                <div class="flex flex-wrap items-center gap-4 text-[11px] font-bold">
-                                                    <div class="flex items-center gap-1.5"><span class="bg-blue-50 dark:bg-blue-900/30 text-blue-500 px-2 py-0.5 rounded text-[10px]">付款人</span><span>{{ getDisplayName(r.payerId) }}</span></div>
-                                                    <div class="flex flex-wrap items-center gap-1.5"><span class="bg-green-50 dark:bg-green-900/30 text-green-500 px-2 py-0.5 rounded text-[10px]">分攤明細</span>
-                                                        <div class="flex flex-wrap gap-1"><span v-for="(val, mid) in r.splitData" :key="mid" class="text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border dark:border-slate-700">{{ getDisplayName(mid) }}(${{ Math.round(val) }})</span></div>
+                                                <div>
+                                                    <span class="text-3xl font-black text-slate-800 dark:text-slate-100 block tracking-tighter">{{ r.desc || '日常雜項' }}</span>
+                                                    <div class="flex items-center gap-3 mt-2">
+                                                        <span class="text-[10px] font-black px-3 py-1 bg-blue-50 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 rounded-full uppercase tracking-tighter border border-blue-100 dark:border-blue-900">付款人</span>
+                                                        <span class="text-sm font-bold text-slate-500 dark:text-slate-400 opacity-80">{{ getDisplayName(r.payerId) }}</span>
                                                     </div>
                                                 </div>
+                                                <div class="ml-auto text-right">
+                                                    <span class="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter italic">${{ r.amount }}</span>
+                                                </div>
                                             </div>
-                                            <div v-if="isAdmin || r.payerId === user.email" class="flex gap-2">
-                                                <button @click="startEdit(r)" class="text-slate-300 hover:text-blue-500 text-lg transition-colors">✎</button>
-                                                <button @click="deleteRecord(index)" class="text-slate-100 dark:text-slate-700 hover:text-red-500 text-2xl px-2 transition-colors">✕</button>
+                                            <div class="flex flex-wrap items-center gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/50">
+                                                <span class="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] opacity-80">Splits</span>
+                                                <div class="flex flex-wrap gap-3">
+                                                    <span v-for="(val, mid) in r.splitData" :key="mid" class="flex items-center gap-2 px-4 py-2 bg-slate-50/80 dark:bg-slate-950/80 rounded-2xl border border-slate-100 dark:border-slate-800 transition hover:bg-white dark:hover:bg-slate-900">
+                                                        <img v-if="allProfiles[mid]?.avatar" :src="allProfiles[mid].avatar" class="w-5 h-5 rounded-lg object-cover border border-white dark:border-slate-700">
+                                                        <span class="text-xs font-black text-slate-600 dark:text-slate-300">{{ getDisplayName(mid) }}</span>
+                                                        <span class="text-xs font-black text-blue-500 tracking-tighter">(${{ Math.round(val) }})</span>
+                                                    </span>
+                                                </div>
                                             </div>
+                                        </div>
+                                        <div v-if="isAdmin || r.payerId === user.email" class="flex flex-col gap-4 pt-2">
+                                            <button @click="startEdit(r)" class="p-3 text-slate-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-2xl transition-all">✎</button>
+                                            <button @click="deleteRecord(index)" class="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-2xl transition-all">✕</button>
                                         </div>
                                     </div>
                                 </div>
@@ -216,8 +310,14 @@
                 return {
                     user: null, userNickname: 'Loading', authFields: { email: '', password: '' },
                     sharedEvents: [], currentEventId: null, inviteEmail: '', newManualName: '',
-                    allNicknames: {}, splitMode: 'equal', 
+                    allProfiles: {}, // 存儲所有成員的個人資料 (暱稱、頭像)
+                    splitMode: 'equal', 
                     appearance: localStorage.getItem('app-theme') || 'auto',
+                    bgBlur: parseInt(localStorage.getItem('bg-blur')) || 5,
+                    bgOpacity: parseInt(localStorage.getItem('bg-opacity')) || 20,
+                    customAvatarUrl: null, hasCustomBg: false,
+                    croppingImage: null, croppingType: null,
+                    cropOffset: { x: 0, y: 0 }, cropScale: 1, isDragging: false, dragStart: { x: 0, y: 0 },
                     newRecord: { amount: null, desc: '', payerId: '', splitData: {} },
                     editingRecordId: null 
                 }
@@ -225,162 +325,117 @@
             computed: {
                 activeEvent() { return this.sharedEvents.find(e => e.id === this.currentEventId); },
                 isAdmin() { return this.activeEvent?.admins.includes(this.user?.email); },
+                overlayStyle() { 
+                    return { 
+                        'backdrop-filter': `blur(${this.bgBlur}px)`, 
+                        '-webkit-backdrop-filter': `blur(${this.bgBlur}px)`, 
+                        'background-color': `rgba(0, 0, 0, ${this.bgOpacity / 100})` 
+                    }; 
+                },
+                cropperImageStyle() { return { transform: `translate(${this.cropOffset.x}px, ${this.cropOffset.y}px) scale(${this.cropScale})`, transition: this.isDragging ? 'none' : 'transform 0.1s' }; },
+                cropperBoxStyle() { return this.croppingType === 'avatar' ? { width: '240px', height: '240px', borderRadius: '40px' } : { width: '320px', height: '180px' }; },
                 activeMembers() {
                     if (!this.activeEvent) return [];
-                    const authM = this.activeEvent.sharedWithEmails.map(email => ({
-                        id: email, displayName: this.allNicknames[email] || email.split('@')[0], type: 'auth'
-                    }));
+                    const authM = this.activeEvent.sharedWithEmails.map(email => ({ id: email, displayName: this.allProfiles[email]?.nickname || email.split('@')[0], type: 'auth' }));
                     const manualM = (this.activeEvent.manualMembers || []).map(m => ({ ...m, displayName: m.name, type: 'manual' }));
                     return [...authM, ...manualM];
                 },
                 customTotal() { return Object.values(this.newRecord.splitData).reduce((a, b) => a + (Number(b) || 0), 0); }
             },
-            methods: {
-                setAppearance(mode) { this.appearance = mode; localStorage.setItem('app-theme', mode); this.applyTheme(); },
-                applyTheme() {
-                    const htmlEl = document.documentElement;
-                    if (this.appearance === 'dark') htmlEl.classList.add('dark');
-                    else if (this.appearance === 'light') htmlEl.classList.remove('dark');
-                    else window.matchMedia('(prefers-color-scheme: dark)').matches ? htmlEl.classList.add('dark') : htmlEl.classList.remove('dark');
-                },
-                async fetchNickname(uid) {
-                    const snap = await getDoc(doc(db, "users_profile", uid));
-                    this.userNickname = snap.exists() ? snap.data().nickname : this.user.email.split('@')[0];
-                    if (!snap.exists()) await setDoc(doc(db, "users_profile", uid), { nickname: this.userNickname, email: this.user.email });
-                },
-                async updateNickname() {
-                    const n = prompt("修改暱稱：", this.userNickname);
-                    if (n?.trim()) { this.userNickname = n.trim(); await updateDoc(doc(db, "users_profile", this.user.uid), { nickname: n.trim() }); }
-                },
-                async handleLogin() { try { await signInWithEmailAndPassword(auth, this.authFields.email, this.authFields.password); } catch (e) { alert("登入失敗"); } },
-                async handleRegister() {
-                    try { 
-                        const cred = await createUserWithEmailAndPassword(auth, this.authFields.email, this.authFields.password);
-                        await setDoc(doc(db, "users_profile", cred.user.uid), { nickname: this.authFields.email.split('@')[0], email: this.authFields.email });
-                    } catch (e) { alert("註冊失敗"); }
-                },
-                async handleLogout() { await signOut(auth); this.user = null; this.sharedEvents = []; this.currentEventId = null; },
-                
-                startEdit(record) {
-                    this.editingRecordId = record.id;
-                    this.newRecord = JSON.parse(JSON.stringify(record));
-                    // 檢查這筆紀錄的 splitData 是否有異於均分，若有則開啟自訂模式
-                    this.splitMode = 'custom'; 
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                },
-                cancelEdit() {
-                    this.editingRecordId = null;
-                    this.newRecord = { amount: null, desc: '', payerId: this.user.email, splitData: {} };
-                    const defaultSplit = {}; this.activeMembers.forEach(m => defaultSplit[m.id] = 0);
-                    this.newRecord.splitData = defaultSplit;
-                },
-
-                async addNewEvent() {
-                    const n = prompt("活動名稱：");
-                    if (n?.trim()) {
-                        const id = "ev_" + Date.now();
-                        await setDoc(doc(db, "events", id), { id, name: n.trim(), admins: [this.user.email], sharedWithEmails: [this.user.email], manualMembers: [], records: [] });
-                        this.currentEventId = id;
-                    }
-                },
-                async deleteEvent() { if (confirm("確定刪除整個活動？此動作不可逆！")) { await deleteDoc(doc(db, "events", this.currentEventId)); this.currentEventId = null; } },
-                async inviteMember() {
-                    if (!this.inviteEmail.trim()) return;
-                    await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayUnion(this.inviteEmail.trim()) });
-                    this.inviteEmail = ''; alert("已發送邀請確定");
-                },
-                async addManualMember() {
-                    if (!this.newManualName.trim()) return;
-                    await updateDoc(doc(db, "events", this.currentEventId), { manualMembers: arrayUnion({ id: "m_"+Date.now(), name: this.newManualName.trim() }) });
-                    this.newManualName = ''; alert("已手動新增成員");
-                },
-                async removeMember(m) {
-                    if (confirm(`移除 ${m.displayName}？`)) {
-                        if (m.type === 'auth') await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayRemove(m.id), admins: arrayRemove(m.id) });
-                        else await updateDoc(doc(db, "events", this.currentEventId), { manualMembers: arrayRemove({ id: m.id, name: m.displayName }) });
-                    }
-                },
-                toggleSplitMember(id) {
-                    if (this.newRecord.splitData[id] !== undefined) delete this.newRecord.splitData[id];
-                    else this.newRecord.splitData[id] = 0;
-                },
-                async addRecord() {
-                    const count = Object.keys(this.newRecord.splitData).length;
-                    if (this.newRecord.amount <= 0 || count === 0) return alert("填入金額並勾選人員");
-                    
-                    let finalSplitData = { ...this.newRecord.splitData };
-                    if (this.splitMode === 'equal') {
-                        const avg = this.newRecord.amount / count;
-                        Object.keys(finalSplitData).forEach(k => finalSplitData[k] = avg);
-                    } else if (this.customTotal !== this.newRecord.amount) return alert("自訂金額與總支出不符！");
-
-                    let updatedRecords;
-                    if (this.editingRecordId) {
-                        updatedRecords = this.activeEvent.records.map(r => r.id === this.editingRecordId ? { ...this.newRecord, id: this.editingRecordId, splitData: finalSplitData } : r);
-                        this.editingRecordId = null;
-                    } else {
-                        updatedRecords = [{ id: Date.now(), ...JSON.parse(JSON.stringify(this.newRecord)), splitData: finalSplitData }, ...this.activeEvent.records];
-                    }
-
-                    await updateDoc(doc(db, "events", this.currentEventId), { records: updatedRecords });
-                    this.newRecord.amount = null; this.newRecord.desc = '';
-                },
-                async deleteRecord(idx) {
-                    if (confirm("確定刪除這筆紀錄？")) {
-                        const r = [...this.activeEvent.records]; r.splice(idx, 1);
-                        await updateDoc(doc(db, "events", this.currentEventId), { records: r });
-                    }
-                },
-                getDisplayName(id) {
-                    const m = this.activeMembers.find(m => m.id === id);
-                    return m ? m.displayName : id.split('@')[0];
-                },
-                calculateBalance(mid) {
-                    let b = 0;
-                    this.activeEvent.records.forEach(r => {
-                        if (r.payerId === mid) b += r.amount;
-                        if (r.splitData[mid] !== undefined) b -= r.splitData[mid];
-                    });
-                    return Math.round(b);
-                },
-                getBalanceClass(id) {
-                    const b = this.calculateBalance(id);
-                    return b > 0 ? 'text-green-500' : (b < 0 ? 'text-red-500' : 'text-slate-400');
-                }
-            },
             watch: {
-                activeMembers: {
-                    immediate: true,
-                    handler(newVal) {
-                        if (newVal.length > 0 && !this.editingRecordId) {
-                            if (!this.newRecord.payerId) this.newRecord.payerId = newVal.find(m => m.id === this.user?.email)?.id || newVal[0].id;
-                            const defaultSplit = {}; newVal.forEach(m => defaultSplit[m.id] = 0);
-                            this.newRecord.splitData = defaultSplit;
-                        }
-                    }
-                },
+                bgBlur(v) { localStorage.setItem('bg-blur', v); },
+                bgOpacity(v) { localStorage.setItem('bg-opacity', v); },
+                activeMembers: { immediate: true, handler(newVal) { if (newVal.length > 0 && !this.editingRecordId) { if (!this.newRecord.payerId) this.newRecord.payerId = newVal.find(m => m.id === this.user?.email)?.id || newVal[0].id; const defaultSplit = {}; newVal.forEach(m => defaultSplit[m.id] = 0); this.newRecord.splitData = defaultSplit; } } },
                 sharedEvents(newEvents) {
                     const allEmails = new Set();
                     newEvents.forEach(ev => ev.sharedWithEmails.forEach(e => allEmails.add(e)));
                     allEmails.forEach(email => {
-                        const q = query(collection(db, "users_profile"), where("email", "==", email));
-                        onSnapshot(q, (snap) => snap.forEach(doc => this.allNicknames[email] = doc.data().nickname));
+                        onSnapshot(query(collection(db, "users_profile"), where("email", "==", email)), (snap) => {
+                            snap.forEach(doc => this.allProfiles[email] = doc.data());
+                        });
                     });
                 }
             },
-            mounted() {
-                this.applyTheme();
-                onAuthStateChanged(auth, (user) => {
-                    this.user = user;
-                    if (user) {
-                        this.fetchNickname(user.uid);
-                        const q = query(collection(db, "events"), where("sharedWithEmails", "array-contains", user.email));
-                        onSnapshot(q, (snap) => {
-                            this.sharedEvents = snap.docs.map(d => d.data());
-                            if (!this.currentEventId && this.sharedEvents.length > 0) this.currentEventId = this.sharedEvents[0].id;
-                        });
+            methods: {
+                // --- 視覺系統與資料庫 ---
+                updateBgDisplay(base64) { const img = document.getElementById('main-bg'); if (base64) { img.src = base64; img.style.display = 'block'; this.hasCustomBg = true; } else { img.style.display = 'none'; this.hasCustomBg = false; } },
+                async initDB() { return new Promise((res) => { const req = indexedDB.open("ProOptimizedDB", 1); req.onupgradeneeded = (e) => e.target.result.createObjectStore("images"); req.onsuccess = (e) => res(e.target.result); }); },
+                async saveImg(k, v) { const db = await this.initDB(); db.transaction("images", "readwrite").objectStore("images").put(v, k); },
+                async loadImg(k) { const db = await this.initDB(); return new Promise((res) => { const req = db.transaction("images").objectStore("images").get(k); req.onsuccess = () => res(req.result); }); },
+                async deleteBackground() { if(confirm("刪除背景？")) { const db = await this.initDB(); db.transaction("images","readwrite").objectStore("images").delete('bg'); this.updateBgDisplay(null); } },
+                
+                // --- 裁切與頭像同步 ---
+                triggerBgUpload() { this.$refs.bgInput.click(); },
+                triggerAvatarUpload() { this.$refs.avatarInput.click(); },
+                onFileChange(e, type) { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (ev) => { this.croppingImage = ev.target.result; this.croppingType = type; this.cropOffset={x:0,y:0}; this.cropScale=1; }; reader.readAsDataURL(file); e.target.value = ''; },
+                confirmCrop() {
+                    const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+                    const boxSize = this.croppingType === 'avatar' ? {w:400,h:400} : {w:1920,h:1080};
+                    canvas.width = boxSize.w; canvas.height = boxSize.h;
+                    ctx.drawImage(this.$refs.cropperImage, 0, 0, boxSize.w, boxSize.h);
+                    const res = canvas.toDataURL('image/jpeg', 0.8);
+                    if (this.croppingType === 'avatar') { this.customAvatarUrl = res; updateDoc(doc(db, "users_profile", this.user.uid), { avatar: res }); }
+                    else { this.updateBgDisplay(res); this.saveImg('bg', res); }
+                    this.croppingImage = null;
+                },
+
+                // --- 帳本管理功能 ---
+                async renameEvent(ev) { const n = prompt("重命名帳本：", ev.name); if (n?.trim() && n !== ev.name) await updateDoc(doc(db, "events", ev.id), { name: n.trim() }); },
+                async makeAdmin(email) { if (confirm(`授權 ${email} 管理帳本？`)) await updateDoc(doc(db, "events", this.currentEventId), { admins: arrayUnion(email) }); },
+                async removeMember(m) {
+                    if (confirm(`確定移除 ${m.displayName}？`)) {
+                        if (m.type === 'auth') await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayRemove(m.id), admins: arrayRemove(m.id) });
+                        else {
+                            const newM = this.activeEvent.manualMembers.filter(p => p.id !== m.id);
+                            await updateDoc(doc(db, "events", this.currentEventId), { manualMembers: newM });
+                        }
                     }
-                });
+                },
+                async addNewEvent() { const n = prompt("輸入帳本名稱："); if (n?.trim()) { const id = "ev_" + Date.now(); await setDoc(doc(db, "events", id), { id, name: n.trim(), admins: [this.user.email], sharedWithEmails: [this.user.email], manualMembers: [], records: [] }); this.currentEventId = id; } },
+                async deleteEvent() { if (confirm("警告：即將永久刪除此帳本！")) { await deleteDoc(doc(db, "events", this.currentEventId)); this.currentEventId = null; } },
+                async inviteMember() { if (this.inviteEmail.trim()) { await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayUnion(this.inviteEmail.trim()) }); this.inviteEmail = ''; alert("已確定邀請"); } },
+                async addManualMember() { if (this.newManualName.trim()) { await updateDoc(doc(db, "events", this.currentEventId), { manualMembers: arrayUnion({ id: "m_"+Date.now(), name: this.newManualName.trim() }) }); this.newManualName = ''; alert("已確定新增成員"); } },
+                
+                // --- 記帳與編輯邏輯 ---
+                toggleSplitMember(id) { if (this.newRecord.splitData[id] !== undefined) delete this.newRecord.splitData[id]; else this.newRecord.splitData[id] = 0; },
+                async addRecord() {
+                    const count = Object.keys(this.newRecord.splitData).length; if (this.newRecord.amount <= 0 || count === 0) return alert("請填入金額並選擇分攤人");
+                    let finalData = { ...this.newRecord.splitData };
+                    if (this.splitMode === 'equal') { const avg = this.newRecord.amount / count; Object.keys(finalData).forEach(k => finalData[k] = avg); }
+                    else if (this.customTotal !== this.newRecord.amount) return alert("自訂金額與總支出不符！");
+
+                    let updated;
+                    if (this.editingRecordId) { updated = this.activeEvent.records.map(r => r.id === this.editingRecordId ? { ...this.newRecord, id: this.editingRecordId, splitData: finalData } : r); this.editingRecordId = null; } 
+                    else { updated = [{ id: Date.now(), ...JSON.parse(JSON.stringify(this.newRecord)), splitData: finalData }, ...this.activeEvent.records]; }
+                    await updateDoc(doc(db, "events", this.currentEventId), { records: updated }); this.newRecord.amount = null; this.newRecord.desc = '';
+                },
+                async deleteRecord(idx) { if (confirm("確定刪除此紀錄？")) { const r = [...this.activeEvent.records]; r.splice(idx, 1); await updateDoc(doc(db, "events", this.currentEventId), { records: r }); } },
+                startEdit(r) { this.editingRecordId = r.id; this.newRecord = JSON.parse(JSON.stringify(r)); this.splitMode = 'custom'; window.scrollTo({ top: 0, behavior: 'smooth' }); },
+                cancelEdit() { this.editingRecordId = null; this.newRecord = { amount: null, desc: '', payerId: this.user.email, splitData: {} }; this.activeMembers.forEach(m => this.newRecord.splitData[m.id] = 0); },
+
+                // --- 系統工具 ---
+                setAppearance(mode) { this.appearance = mode; localStorage.setItem('app-theme', mode); this.applyTheme(); },
+                applyTheme() { const el = document.documentElement; if (this.appearance === 'dark') el.classList.add('dark'); else el.classList.remove('dark'); },
+                getDisplayName(id) { return this.allProfiles[id]?.nickname || id.split('@')[0]; },
+                calculateBalance(mid) { let b = 0; if(!this.activeEvent) return 0; this.activeEvent.records.forEach(r => { if (r.payerId === mid) b += r.amount; if (r.splitData[mid]) b -= r.splitData[mid]; }); return Math.round(b); },
+                getBalanceClass(id) { const b = this.calculateBalance(id); return b > 0 ? 'text-green-500' : (b < 0 ? 'text-red-500' : 'text-slate-400'); },
+                async fetchNickname(uid) { const snap = await getDoc(doc(db, "users_profile", uid)); if (snap.exists()) { this.userNickname = snap.data().nickname; this.customAvatarUrl = snap.data().avatar; } else { this.userNickname = this.user.email.split('@')[0]; } },
+                async updateNickname() { const n = prompt("新暱稱：", this.userNickname); if (n?.trim()) { this.userNickname = n.trim(); await updateDoc(doc(db, "users_profile", this.user.uid), { nickname: n.trim(), email: this.user.email }); } },
+                async handleLogin() { try { await signInWithEmailAndPassword(auth, this.authFields.email, this.authFields.password); } catch(e){ alert("登入失敗"); } },
+                async handleRegister() { try { const cred = await createUserWithEmailAndPassword(auth, this.authFields.email, this.authFields.password); await setDoc(doc(db, "users_profile", cred.user.uid), { nickname: this.authFields.email.split('@')[0], email: this.authFields.email, avatar: null }); } catch(e){ alert("註冊失敗"); } },
+                async handleLogout() { await signOut(auth); location.reload(); },
+
+                startDrag(e) { this.isDragging = true; this.dragStart = { x: e.clientX - this.cropOffset.x, y: e.clientY - this.cropOffset.y }; },
+                onDrag(e) { if (this.isDragging) this.cropOffset = { x: e.clientX - this.dragStart.x, y: e.clientY - this.dragStart.y }; },
+                endDrag() { this.isDragging = false; },
+                startTouch(e) { if (e.touches.length === 1) { this.isDragging = true; this.dragStart = { x: e.touches[0].clientX - this.cropOffset.x, y: e.touches[0].clientY - this.cropOffset.y }; } },
+                onTouchMove(e) { if (e.touches.length === 1 && this.isDragging) this.cropOffset = { x: e.touches[0].clientX - this.dragStart.x, y: e.touches[0].clientY - this.dragStart.y }; },
+                endTouch() { this.isDragging = false; }
+            },
+            async mounted() {
+                this.applyTheme();
+                const bg = await this.loadImg('bg'); this.updateBgDisplay(bg);
+                onAuthStateChanged(auth, (user) => { if (user) { this.user = user; this.fetchNickname(user.uid); onSnapshot(query(collection(db, "events"), where("sharedWithEmails", "array-contains", user.email)), (snap) => { this.sharedEvents = snap.docs.map(d => d.data()); if (!this.currentEventId && this.sharedEvents.length > 0) this.currentEventId = this.sharedEvents[0].id; }); } });
             }
         }).mount('#app');
     </script>
