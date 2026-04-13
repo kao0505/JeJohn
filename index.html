@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>記帳</title>
+    <title>共同記帳</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -13,41 +13,33 @@
         [v-cloak] { display: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        /* 背景層：硬體加速與手機滑動優化 */
         #main-bg {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            z-index: -3; object-fit: cover; transform: translate3d(0,0,0);
+            z-index: -3; object-fit: cover; transform: translateZ(0);
         }
         #main-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            z-index: -2; pointer-events: none; transform: translate3d(0,0,0);
+            z-index: -2; pointer-events: none; transform: translateZ(0);
+            transition: backdrop-filter 0.2s, background-color 0.2s;
         }
 
-        /* 玻璃卡片：手機上減少濾鏡運算提高流暢度 */
         .glass-card {
             background-color: rgba(255, 255, 255, 0.96);
             border: 1px solid rgba(255, 255, 255, 1);
-            box-shadow: 0 8px 20px -5px rgba(0, 0, 0, 0.08);
-            border-radius: 2rem;
-            transform: translate3d(0,0,0);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
+            border-radius: 2.5rem;
+            isolation: isolate;
         }
         .dark .glass-card {
             background-color: rgba(30, 41, 59, 0.98);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
         }
 
-        /* 明細名稱：確保不縮減、自動換行 */
-        .record-title {
-            word-break: break-word;
-            overflow-wrap: break-word;
-            white-space: normal;
-            @apply font-black text-slate-800 dark:text-slate-100;
-        }
-
-        /* 裁切視窗：手機全螢幕優化 */
-        #cropper-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        #cropper-container { width: 95%; max-width: 500px; height: 50vh; background: #000; position: relative; overflow: hidden; border-radius: 2rem; }
+        .full-info-text { word-break: break-all; white-space: normal; line-height: 1.4; }
+        
+        #cropper-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #cropper-container { width: 92%; max-width: 500px; height: 50vh; background: #000; position: relative; overflow: hidden; border-radius: 2rem; border: 1px solid #333; }
         #cropper-image { position: absolute; cursor: move; touch-action: none; }
         #cropper-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 3px solid #3b82f6; box-shadow: 0 0 0 9999px rgba(0,0,0,0.7); pointer-events: none; }
 
@@ -55,7 +47,7 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="min-h-screen font-sans relative text-slate-900 dark:text-slate-100 transition-colors duration-300 overflow-x-hidden">
+<body class="min-h-screen font-sans relative text-slate-900 dark:text-slate-100 transition-colors duration-300">
     
     <img id="main-bg" src="" style="display: none;">
     
@@ -67,208 +59,206 @@
                 <img :src="croppingImage" id="cropper-image" ref="cropperImage" :style="cropperImageStyle">
                 <div id="cropper-box" :style="cropperBoxStyle"></div>
             </div>
-            <div class="flex gap-4 mt-8">
-                <button @click="croppingImage = null" class="px-8 py-3 bg-slate-700 text-white rounded-2xl font-bold">取消</button>
-                <button @click="confirmCrop" class="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-lg">確認裁切</button>
+            <div class="flex gap-4 mt-8 px-4 w-full max-w-sm">
+                <button @click="croppingImage = null" class="flex-1 py-3 bg-slate-700 text-white rounded-2xl font-bold">取消</button>
+                <button @click="confirmCrop" class="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-lg">確認裁切</button>
             </div>
         </div>
 
-        <div class="max-w-6xl mx-auto p-3 md:p-6 relative z-10">
+        <div class="w-full max-w-[1400px] mx-auto p-3 md:p-8 relative z-10">
             
             <div v-if="!user" class="flex items-center justify-center min-h-[85vh] fade-in">
-                <div class="glass-card p-8 md:p-12 w-full max-w-md text-center">
-                    <div class="w-20 h-20 bg-blue-600 rounded-[2rem] mx-auto mb-8 flex items-center justify-center shadow-xl">
-                        <span class="text-white text-4xl font-black">$</span>
-                    </div>
-                    <h2 class="text-3xl font-black mb-8 tracking-tighter">雲端多人記帳</h2>
+                <div class="glass-card p-10 w-full max-w-md text-center">
+                    <h2 class="text-4xl font-black text-blue-600 dark:text-blue-400 mb-2">共同記帳</h2>
+                    <p class="text-slate-400 mb-10 font-medium">多人即時同步帳本</p>
                     <div class="space-y-4">
-                        <input v-model="authFields.email" type="email" placeholder="電子郵件" class="w-full p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none text-center">
-                        <input v-model="authFields.password" type="password" placeholder="密碼" class="w-full p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none text-center">
-                        <button @click="handleLogin" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black">登入</button>
-                        <button @click="handleRegister" class="w-full text-slate-400 text-sm mt-2">註冊新帳號</button>
+                        <input v-model="authFields.email" type="email" placeholder="電子郵件" class="w-full p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none text-center focus:ring-2 focus:ring-blue-500 transition-all">
+                        <input v-model="authFields.password" type="password" placeholder="密碼" class="w-full p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none text-center focus:ring-2 focus:ring-blue-500 transition-all">
+                        <button @click="handleLogin" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition">登入</button>
+                        <button @click="handleRegister" class="w-full text-slate-400 text-sm mt-2 hover:text-blue-500 transition">註冊帳號</button>
                     </div>
                 </div>
             </div>
 
-            <div v-else class="space-y-4 md:y-6">
-                <header class="flex flex-col md:flex-row justify-between items-center glass-card px-6 py-4 md:rounded-full gap-4">
-                    <div class="flex items-center gap-4 w-full md:w-auto">
-                        <div @click="triggerAvatarUpload" class="relative w-14 h-14 md:w-16 md:h-16 cursor-pointer overflow-hidden rounded-2xl border-4 border-white dark:border-slate-700 shadow-md group shrink-0">
+            <div v-else class="space-y-6 fade-in">
+                <header class="flex flex-col xl:flex-row justify-between items-center glass-card p-4 md:p-6 rounded-[2.8rem] gap-6">
+                    <div class="flex items-center gap-4 w-full xl:w-auto">
+                        <div @click="triggerAvatarUpload" class="relative w-16 h-16 cursor-pointer overflow-hidden rounded-[1.2rem] border-4 border-white dark:border-slate-700 shadow-lg group shrink-0 transition-all active:scale-95">
                             <img v-if="customAvatarUrl" :src="customAvatarUrl" class="w-full h-full object-cover">
-                            <div v-else class="bg-blue-600 text-white w-full h-full flex items-center justify-center font-black"> {{ userNickname[0] }} </div>
+                            <div v-else class="bg-blue-600 text-white w-full h-full flex items-center justify-center font-black text-2xl uppercase"> {{ userNickname[0] }} </div>
+                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] text-white font-black">換圖</div>
                             <input type="file" ref="avatarInput" @change="onFileChange($event, 'avatar')" accept="image/*" class="hidden">
                         </div>
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
-                                <span class="font-black text-lg md:text-xl truncate">{{ userNickname }}</span>
-                                <button @click="updateNickname" class="px-2 py-0.5 text-[10px] bg-blue-50 text-blue-500 rounded font-bold shrink-0">更名</button>
+                                <span class="font-black text-xl md:text-3xl tracking-tighter truncate">共同記帳</span>
+                                <span class="px-3 py-1 bg-blue-50 text-blue-600 text-xs rounded-full font-black uppercase">{{ userNickname }}</span>
+                                <button @click="updateNickname" class="text-[10px] text-slate-400 hover:text-blue-500 transition">修改</button>
                             </div>
-                            <p class="text-[10px] text-slate-400 font-mono truncate">{{ user.email }}</p>
+                            <p class="text-xs text-slate-400 font-mono mt-1 opacity-70">{{ user.email }}</p>
                         </div>
                     </div>
                     
-                    <div class="flex flex-wrap items-center justify-center gap-3 w-full md:w-auto">
-                        <div class="flex items-center gap-3 bg-slate-100 dark:bg-black/30 p-2 px-4 rounded-2xl">
+                    <div class="flex flex-wrap items-center justify-center xl:justify-end gap-3 w-full xl:w-auto">
+                        <div class="flex items-center gap-4 bg-slate-100 dark:bg-black/30 p-2 px-5 rounded-2xl border border-white/10">
                             <div class="flex items-center gap-2">
-                                <label class="text-[9px] font-black text-slate-500">模糊</label>
-                                <input type="range" v-model.number="bgBlur" min="0" max="25" class="w-12 md:w-16 h-1 accent-blue-600">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">模糊度</label>
+                                <input type="range" v-model.number="bgBlur" min="0" max="25" class="w-16 md:w-24 h-1 accent-blue-600">
                             </div>
-                            <div class="flex items-center gap-2 border-l pl-3">
-                                <label class="text-[9px] font-black text-slate-500">深淺</label>
-                                <input type="range" v-model.number="bgOpacity" min="0" max="85" class="w-12 md:w-16 h-1 accent-blue-600">
+                            <div class="flex items-center gap-2 border-l border-slate-300 dark:border-slate-700 pl-4">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">深淺度</label>
+                                <input type="range" v-model.number="bgOpacity" min="0" max="85" class="w-16 md:w-24 h-1 accent-blue-600">
                             </div>
                         </div>
                         
                         <div class="flex items-center gap-2">
-                            <button @click="setAppearance('light')" :class="appearance === 'light' ? 'bg-white text-blue-600' : 'text-slate-400'" class="px-3 py-1.5 text-xs font-bold rounded-xl border dark:border-slate-700">淺</button>
-                            <button @click="setAppearance('dark')" :class="appearance === 'dark' ? 'bg-slate-800 text-blue-400' : 'text-slate-400'" class="px-3 py-1.5 text-xs font-bold rounded-xl border dark:border-slate-700">深</button>
-                            <button @click="triggerBgUpload" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-xl font-black">換背景</button>
-                            <button v-if="hasCustomBg" @click="deleteBackground" class="text-red-500 px-1 font-bold">✕</button>
+                            <button @click="setAppearance('light')" :class="appearance === 'light' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'" class="px-3 py-2 text-xs font-black rounded-xl border dark:border-slate-700">淺色</button>
+                            <button @click="setAppearance('dark')" :class="appearance === 'dark' ? 'bg-slate-800 text-blue-400 shadow-md' : 'text-slate-400'" class="px-3 py-2 text-xs font-black rounded-xl border dark:border-slate-700">深色</button>
+                            <div class="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                            <button @click="triggerBgUpload" class="text-xs bg-blue-600 text-white px-4 py-2 rounded-xl font-black shadow-lg active:scale-95 transition">換背景</button>
+                            <button v-if="hasCustomBg" @click="deleteBackground" class="text-red-500 font-bold px-2 transition-transform hover:scale-125">✕</button>
+                            <input type="file" ref="bgInput" @change="onFileChange($event, 'background')" accept="image/*" class="hidden">
                         </div>
-                        <button @click="handleLogout" class="text-xs text-slate-400 font-bold ml-2">登出</button>
+                        <button @click="handleLogout" class="text-xs text-slate-400 font-bold hover:text-red-400 transition ml-2">登出</button>
                     </div>
                 </header>
 
-                <nav class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 px-1">
+                <nav class="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2 px-1">
                     <button v-for="ev in sharedEvents" :key="ev.id" @click="currentEventId = ev.id"
-                        :class="currentEventId === ev.id ? 'bg-blue-600 text-white shadow-lg' : 'glass-card text-slate-500 border-transparent'"
-                        class="px-6 md:px-8 py-3 rounded-2xl font-black text-xs md:text-sm shrink-0 transition-all">
+                        :class="currentEventId === ev.id ? 'bg-blue-600 text-white shadow-xl scale-105' : 'glass-card text-slate-500 border-transparent'"
+                        class="px-8 py-4 rounded-[1.8rem] font-black text-sm shrink-0 transition-all active:scale-95">
                         {{ ev.name }}
                     </button>
-                    <button @click="addNewEvent" class="glass-card text-blue-600 px-5 py-3 rounded-2xl font-black text-xl hover:bg-blue-100 transition shrink-0">+</button>
+                    <button @click="addNewEvent" class="glass-card text-blue-600 px-6 py-4 rounded-[1.8rem] font-black text-xl hover:bg-blue-50 transition shrink-0 border-dashed border-2 border-blue-200 shadow-none">+</button>
                 </nav>
 
-                <div v-if="activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 items-start">
-                    <aside class="lg:col-span-4 space-y-4 md:space-y-6">
-                        <div class="glass-card p-6">
-                            <div class="flex justify-between items-center mb-6">
-                                <h2 @click="isAdmin ? renameEvent(activeEvent) : null" class="text-xl font-black cursor-pointer group">
-                                    {{ activeEvent.name }} <span v-if="isAdmin" class="text-blue-400 text-sm">✎</span>
+                <div v-if="activeEvent" class="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
+                    <aside class="lg:col-span-4 space-y-6">
+                        <div class="glass-card p-6 md:p-8">
+                            <div class="flex justify-between items-center mb-8">
+                                <h2 @click="isAdmin ? renameEvent(activeEvent) : null" class="text-2xl font-black cursor-pointer group flex items-center gap-2">
+                                    {{ activeEvent.name }} <span v-if="isAdmin" class="text-blue-400 opacity-20 group-hover:opacity-100 transition">✎</span>
                                 </h2>
-                                <span class="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded-full font-black uppercase">{{ isAdmin ? 'Admin' : 'User' }}</span>
+                                <span class="text-[9px] bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-black uppercase">共同記帳</span>
                             </div>
-                            <div class="space-y-3">
-                                <div class="space-y-2 max-h-48 md:max-h-64 overflow-y-auto no-scrollbar pr-1">
-                                    <div v-for="m in activeMembers" :key="m.id" class="flex justify-between items-center p-3 bg-slate-100/50 dark:bg-slate-900/50 rounded-2xl">
-                                        <div class="flex items-center gap-3">
-                                            <div class="w-10 h-10 rounded-xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm shrink-0">
+                            <div class="space-y-4">
+                                <div class="space-y-3 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
+                                    <div v-for="m in activeMembers" :key="m.id" class="flex justify-between items-center p-4 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border border-white/20 transition hover:scale-[1.02]">
+                                        <div class="flex items-center gap-4 min-w-0">
+                                            <div class="w-12 h-12 rounded-xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md shrink-0">
                                                 <img v-if="allProfiles[m.id]?.avatar" :src="allProfiles[m.id].avatar" class="w-full h-full object-cover">
-                                                <div v-else class="bg-slate-200 dark:bg-slate-800 w-full h-full flex items-center justify-center font-bold text-slate-400 text-xs uppercase">{{ m.displayName[0] }}</div>
+                                                <div v-else class="bg-slate-100 dark:bg-slate-800 w-full h-full flex items-center justify-center font-bold text-slate-400 text-xs">{{ m.displayName[0] }}</div>
                                             </div>
                                             <div class="flex flex-col min-w-0">
-                                                <span class="font-black text-sm truncate">{{ m.displayName }}</span>
+                                                <span class="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{{ m.displayName }}</span>
                                                 <div class="flex gap-2 text-[9px] mt-1 font-black uppercase">
                                                     <span v-if="activeEvent.admins.includes(m.id)" class="text-blue-500">管理員</span>
-                                                    <button v-if="isAdmin && !activeEvent.admins.includes(m.id) && m.type === 'auth'" @click="makeAdmin(m.id)" class="text-blue-400 hover:underline">升權</button>
-                                                    <button v-if="isAdmin && m.id !== user.email" @click="removeMember(m)" class="text-red-400 hover:underline">移除</button>
+                                                    <button v-if="isAdmin && !activeEvent.admins.includes(m.id) && m.type === 'auth'" @click="makeAdmin(m.id)" class="text-blue-400">升權</button>
+                                                    <button v-if="isAdmin && m.id !== user.email" @click="removeMember(m)" class="text-red-400">移除</button>
                                                 </div>
                                             </div>
                                         </div>
-                                        <span :class="getBalanceClass(m.id)" class="font-mono font-black text-base md:text-lg">${{ calculateBalance(m.id) }}</span>
+                                        <span :class="getBalanceClass(m.id)" class="font-mono font-black text-xl ml-2 tracking-tighter shrink-0">${{ calculateBalance(m.id) }}</span>
                                     </div>
                                 </div>
-                                <div v-if="isAdmin" class="pt-4 border-t space-y-2">
-                                    <div class="grid grid-cols-1 gap-2">
-                                        <div class="flex gap-2">
-                                            <input v-model="inviteEmail" placeholder="邀請註冊 Email" class="flex-1 text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none outline-none">
-                                            <button @click="inviteMember" class="bg-blue-600 text-white px-4 rounded-2xl text-xs font-black">邀請</button>
-                                        </div>
-                                        <div class="flex gap-2">
-                                            <input v-model="newManualName" placeholder="手動加人" class="flex-1 text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none outline-none">
-                                            <button @click="addManualMember" class="bg-green-600 text-white px-4 rounded-2xl text-xs font-black">確定</button>
-                                        </div>
+                                <div v-if="isAdmin" class="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                                    <div class="flex flex-col sm:flex-row gap-2">
+                                        <input v-model="inviteEmail" placeholder="邀請 Email..." class="flex-1 text-xs p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 outline-none border-none text-center">
+                                        <button @click="inviteMember" class="bg-blue-600 text-white px-5 py-3 rounded-2xl text-xs font-black shadow-lg active:scale-95 transition">邀請</button>
                                     </div>
-                                    <button @click="deleteEvent" class="w-full mt-2 py-2 text-red-400 text-[10px] font-black border border-red-50 dark:border-red-900/30 rounded-xl uppercase">❌ 刪除活動</button>
+                                    <div class="flex flex-col sm:flex-row gap-2">
+                                        <input v-model="newManualName" placeholder="手動加人..." class="flex-1 text-xs p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 outline-none border-none text-center">
+                                        <button @click="addManualMember" class="bg-green-600 text-white px-5 py-3 rounded-2xl text-xs font-black shadow-lg active:scale-95 transition">確定</button>
+                                    </div>
+                                    <button @click="deleteEvent" class="w-full mt-2 py-3 text-red-400 text-[10px] font-black border border-red-50 dark:border-red-900/30 rounded-2xl uppercase tracking-widest hover:bg-red-50 transition">❌ 刪除活動帳本</button>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="glass-card p-6 md:p-8 relative overflow-hidden">
-                            <div v-if="editingRecordId" class="absolute top-0 left-0 w-full bg-blue-500 text-white text-[10px] font-black text-center py-1 uppercase">Editing...</div>
-                            <div class="flex justify-between items-center mb-6">
-                                <h3 class="font-black text-slate-400 text-xs tracking-widest uppercase italic opacity-60">Entry</h3>
+                        <div class="glass-card p-8 md:p-10 relative overflow-hidden">
+                            <div v-if="editingRecordId" class="absolute top-0 left-0 w-full bg-blue-500 text-white text-[10px] font-black text-center py-1.5 uppercase">編輯中</div>
+                            <div class="flex justify-between items-center mb-8">
+                                <h3 class="font-black text-slate-400 text-xs tracking-widest uppercase opacity-60 italic">Record Entry</h3>
                                 <button @click="splitMode = (splitMode === 'equal' ? 'custom' : 'equal')" class="text-[10px] font-black text-blue-500 underline">模式：{{ splitMode === 'equal' ? '均分' : '自訂' }}</button>
                             </div>
-                            <div class="space-y-4 md:space-y-6">
+                            <div class="space-y-6">
                                 <div class="relative">
                                     <span class="absolute left-6 top-5 text-slate-300 font-bold text-2xl">$</span>
-                                    <input v-model.number="newRecord.amount" type="number" placeholder="0" class="w-full p-5 pl-12 rounded-[1.5rem] text-4xl font-black text-blue-600 dark:text-blue-400 outline-none bg-slate-100 dark:bg-slate-800 border-transparent focus:bg-white transition-all shadow-inner">
+                                    <input v-model.number="newRecord.amount" type="number" placeholder="0" class="w-full p-6 pl-12 rounded-[2rem] text-4xl font-black text-blue-600 dark:text-blue-400 outline-none bg-slate-100 dark:bg-slate-800 border-transparent focus:bg-white transition-all shadow-inner text-center">
                                 </div>
-                                <input v-model="newRecord.desc" type="text" placeholder="這筆錢花在哪裡？" class="w-full p-4 border dark:border-slate-700 rounded-2xl text-sm outline-none bg-slate-100 dark:bg-slate-800 focus:bg-white transition">
-                                <div class="space-y-2">
-                                    <label class="text-[9px] font-black text-slate-400 uppercase ml-3">誰先付錢？</label>
-                                    <select v-model="newRecord.payerId" class="w-full p-4 border dark:border-slate-700 rounded-2xl text-sm bg-slate-100 dark:bg-slate-800 font-black focus:bg-white transition">
+                                <input v-model="newRecord.desc" type="text" placeholder="這筆錢花在哪裡？" class="w-full p-4 border dark:border-slate-700 rounded-2xl text-sm outline-none bg-slate-50 dark:bg-slate-800 focus:bg-white transition text-center">
+                                <div class="space-y-2 text-center">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">付款人</label>
+                                    <select v-model="newRecord.payerId" class="w-full p-4 border dark:border-slate-700 rounded-2xl text-sm bg-slate-50 dark:bg-slate-800 font-black cursor-pointer focus:bg-white transition text-center">
                                         <option v-for="m in activeMembers" :value="m.id">{{ m.displayName }}</option>
                                     </select>
                                 </div>
-                                <div class="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-[1.5rem] border border-white/20 space-y-4">
-                                    <p class="text-[9px] font-black text-slate-400 uppercase text-center tracking-widest">分攤明細</p>
-                                    <div v-for="m in activeMembers" :key="m.id" class="flex items-center gap-4">
-                                        <input type="checkbox" :checked="newRecord.splitData[m.id] !== undefined" @change="toggleSplitMember(m.id)" class="w-5 h-5 rounded-lg border-slate-300 text-blue-600 transition">
+                                <div class="p-6 bg-slate-50/50 dark:bg-slate-950/60 rounded-[2.5rem] border border-white/20 space-y-4">
+                                    <p class="text-[9px] font-black text-slate-400 uppercase text-center tracking-widest opacity-60">分攤明細</p>
+                                    <div v-for="m in activeMembers" :key="m.id" class="flex items-center gap-5">
+                                        <input type="checkbox" :checked="newRecord.splitData[m.id] !== undefined" @change="toggleSplitMember(m.id)" class="w-6 h-6 rounded-lg border-slate-300 text-blue-600 cursor-pointer">
                                         <span class="text-sm font-black flex-1 text-slate-700 dark:text-slate-300">{{ m.displayName }}</span>
-                                        <div v-if="newRecord.splitData[m.id] !== undefined" class="w-24 shrink-0">
-                                            <input v-if="splitMode === 'custom'" v-model.number="newRecord.splitData[m.id]" type="number" class="w-full p-2 border dark:border-slate-700 rounded-xl text-right text-xs text-blue-500 font-black bg-white dark:bg-slate-800 outline-none">
+                                        <div v-if="newRecord.splitData[m.id] !== undefined" class="w-28 shrink-0">
+                                            <input v-if="splitMode === 'custom'" v-model.number="newRecord.splitData[m.id]" type="number" class="w-full p-2 border dark:border-slate-700 rounded-xl text-right text-sm text-blue-600 font-black bg-white dark:bg-slate-800 outline-none">
                                             <span v-else class="text-xs text-slate-400 block text-right font-mono italic opacity-60">${{ Math.round(newRecord.amount / Object.keys(newRecord.splitData).length) || 0 }}</span>
                                         </div>
                                     </div>
-                                    <div v-if="splitMode === 'custom'" class="text-[10px] text-right pt-2 border-t border-dashed font-black" :class="customTotal === newRecord.amount ? 'text-green-500' : 'text-red-500'">
+                                    <div v-if="splitMode === 'custom'" class="text-[10px] text-right pt-2 border-t border-dashed font-black" :class="customTotal === newRecord.amount ? 'text-green-500' : 'text-red-400'">
                                         總計: {{ customTotal }} / {{ newRecord.amount }}
                                     </div>
                                 </div>
                                 <div class="flex gap-4">
-                                    <button @click="addRecord" class="flex-1 bg-blue-600 text-white py-5 rounded-[1.5rem] font-black text-xl shadow-lg active:scale-95 transition-all">{{ editingRecordId ? '更新' : '儲存' }}</button>
-                                    <button v-if="editingRecordId" @click="cancelEdit" class="px-6 bg-slate-200 dark:bg-slate-700 rounded-[1.5rem] text-xs font-black">取消</button>
+                                    <button @click="addRecord" class="flex-1 bg-blue-600 text-white py-5 rounded-[2rem] font-black text-xl shadow-lg active:scale-95 transition-all hover:bg-blue-700">{{ editingRecordId ? '更新' : '儲存' }}</button>
+                                    <button v-if="editingRecordId" @click="cancelEdit" class="px-8 bg-slate-200 dark:bg-slate-700 rounded-[2rem] text-xs font-black">取消</button>
                                 </div>
                             </div>
                         </div>
                     </aside>
 
-                    <main class="lg:col-span-8 overflow-hidden">
-                        <div class="glass-card p-6 md:p-10 rounded-[3rem] min-h-[500px] relative shadow-2xl">
-                            <h3 class="text-2xl font-black mb-8 flex items-center gap-4 tracking-tighter">
-                                <span class="w-2 h-10 bg-blue-600 rounded-full shadow-lg"></span> 
-                                帳目流水紀錄
+                    <main class="lg:col-span-8">
+                        <div class="glass-card p-6 md:p-12 rounded-[3.5rem] min-h-[750px] relative shadow-2xl">
+                            <h3 class="text-3xl font-black mb-12 flex flex-col sm:flex-row sm:items-center gap-4 tracking-tighter">
+                                <span class="w-12 h-3 sm:w-3 sm:h-12 bg-blue-600 rounded-full shadow-lg shadow-blue-500/40"></span> 
+                                共同記帳 流水紀錄
                             </h3>
-                            <div v-if="activeEvent.records.length === 0" class="flex flex-col items-center justify-center py-48 text-slate-300 dark:text-slate-700 italic">
+                            <div v-if="activeEvent.records.length === 0" class="flex flex-col items-center justify-center py-56 text-slate-300 dark:text-slate-700 italic">
                                 <div class="text-8xl mb-8 opacity-20">📜</div>
-                                <h4 class="font-black text-2xl opacity-40">目前沒有開銷紀錄</h4>
+                                <h4 class="font-black text-2xl opacity-40">目前沒有紀錄</h4>
                             </div>
-                            <div v-else class="space-y-4 md:space-y-6">
-                                <div v-for="(r, index) in activeEvent.records" :key="r.id" class="p-6 md:p-8 bg-white/60 dark:bg-slate-900/50 rounded-[2.5rem] md:rounded-[3rem] border border-white dark:border-white/5 transition-all duration-300 group shadow-sm hover:shadow-xl">
-                                    <div class="flex flex-col gap-6">
-                                        <div class="flex items-start gap-4 md:gap-6 w-full">
-                                            <div class="w-12 h-12 md:w-16 md:h-16 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-700 shadow-md shrink-0">
-                                                <img v-if="allProfiles[r.payerId]?.avatar" :src="allProfiles[r.payerId].avatar" class="w-full h-full object-cover">
-                                                <div v-else class="bg-blue-50 dark:bg-slate-800 w-full h-full flex items-center justify-center font-black text-xl text-blue-500 uppercase">{{ getDisplayName(r.payerId)[0] }}</div>
-                                            </div>
-                                            <div class="flex-1 min-w-0">
-                                                <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4">
-                                                    <span class="record-title text-lg md:text-2xl">{{ r.desc || '日常雜項' }}</span>
-                                                    <span class="amount-display shrink-0">${{ r.amount }}</span>
+                            <div v-else class="space-y-6">
+                                <div v-for="(r, index) in activeEvent.records" :key="r.id" class="p-6 md:p-10 bg-white/60 dark:bg-slate-900/50 rounded-[3.5rem] border border-white dark:border-white/5 transition-all duration-500 group shadow-sm hover:shadow-2xl hover:scale-[1.01]">
+                                    <div class="flex flex-col gap-8">
+                                        <div class="flex flex-col sm:flex-row justify-between items-start gap-6 w-full">
+                                            <div class="flex items-start gap-5 min-w-0 flex-1">
+                                                <div class="w-16 h-16 rounded-[1.5rem] overflow-hidden border-2 border-white dark:border-slate-700 shadow-xl shrink-0 transition-transform group-hover:rotate-3">
+                                                    <img v-if="allProfiles[r.payerId]?.avatar" :src="allProfiles[r.payerId].avatar" class="w-full h-full object-cover">
+                                                    <div v-else class="bg-blue-50 dark:bg-slate-800 w-full h-full flex items-center justify-center font-black text-2xl text-blue-500 uppercase">{{ getDisplayName(r.payerId)[0] }}</div>
                                                 </div>
-                                                <div class="flex items-center gap-2 mt-2">
-                                                    <span class="text-[9px] font-black px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-600 rounded-full uppercase shrink-0">PAYER</span>
-                                                    <span class="text-xs font-black text-slate-500 truncate">{{ getDisplayName(r.payerId) }}</span>
+                                                <div class="flex-1 min-w-0">
+                                                    <span class="full-info-text text-2xl md:text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tighter leading-tight">{{ r.desc || '日常雜項' }}</span>
+                                                    <div class="flex items-center gap-3 mt-4">
+                                                        <span class="text-[9px] font-black px-2.5 py-1 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 rounded-full uppercase border border-blue-200 dark:border-blue-900">Payer</span>
+                                                        <span class="text-sm font-black text-slate-500 opacity-80">{{ getDisplayName(r.payerId) }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 shrink-0">
+                                                <span class="text-4xl md:text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter italic">${{ r.amount }}</span>
+                                                <div v-if="isAdmin || r.payerId === user.email" class="flex gap-4">
+                                                    <button @click="startEdit(r)" class="p-3 text-slate-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-2xl transition-all">✎</button>
+                                                    <button @click="deleteRecord(index)" class="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-2xl transition-all">✕</button>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div class="flex flex-col md:flex-row items-start md:items-center gap-4 pt-4 border-t border-slate-100 dark:border-white/5 w-full">
-                                            <div class="flex-1 flex flex-wrap items-center gap-2">
-                                                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-60 mr-1">Splits</span>
-                                                <div v-for="(val, mid) in r.splitData" :key="mid" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/80 dark:bg-slate-950/80 rounded-full border border-slate-100 dark:border-slate-800 shadow-sm">
-                                                    <img v-if="allProfiles[mid]?.avatar" :src="allProfiles[mid].avatar" class="w-4 h-4 rounded-lg object-cover">
-                                                    <span class="text-[10px] font-black text-slate-600 dark:text-slate-300">{{ getDisplayName(mid) }}</span>
-                                                    <span class="text-[10px] font-black text-blue-500">(${{ Math.round(val) }})</span>
-                                                </div>
-                                            </div>
-                                            <div v-if="isAdmin || r.payerId === user.email" class="flex gap-4 self-end md:self-auto shrink-0">
-                                                <button @click="startEdit(r)" class="p-2.5 text-slate-300 hover:text-blue-500 transition-all">
-                                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                                                </button>
-                                                <button @click="deleteRecord(index)" class="p-2.5 text-slate-200 hover:text-red-500 transition-all">
-                                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                                </button>
+                                        <div class="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-100 dark:border-white/5">
+                                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest opacity-60 mr-2">Splits</span>
+                                            <div class="flex flex-wrap gap-3">
+                                                <span v-for="(val, mid) in r.splitData" :key="mid" class="flex items-center gap-2 px-4 py-2 bg-slate-50/80 dark:bg-slate-950/80 rounded-2xl border border-slate-100 dark:border-slate-800 transition hover:bg-white dark:hover:bg-slate-900">
+                                                    <img v-if="allProfiles[mid]?.avatar" :src="allProfiles[mid].avatar" class="w-6 h-6 rounded-lg object-cover border-white border">
+                                                    <span class="text-xs font-black text-slate-600 dark:text-slate-300">{{ getDisplayName(mid) }}</span>
+                                                    <span class="text-xs font-black text-blue-500">(${{ Math.round(val) }})</span>
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -306,8 +296,7 @@
                 return {
                     user: null, userNickname: 'Loading', authFields: { email: '', password: '' },
                     sharedEvents: [], currentEventId: null, inviteEmail: '', newManualName: '',
-                    allProfiles: {}, // 存儲 { email: { nickname, avatar } }
-                    splitMode: 'equal', 
+                    allProfiles: {}, splitMode: 'equal', 
                     appearance: localStorage.getItem('app-theme') || 'auto',
                     bgBlur: parseInt(localStorage.getItem('bg-blur')) || 5,
                     bgOpacity: parseInt(localStorage.getItem('bg-opacity')) || 25,
@@ -323,7 +312,7 @@
                 isAdmin() { return this.activeEvent?.admins.includes(this.user?.email); },
                 overlayStyle() { return { 'backdrop-filter': `blur(${this.bgBlur}px)`, 'background-color': `rgba(0, 0, 0, ${this.bgOpacity / 100})` }; },
                 cropperImageStyle() { return { transform: `translate(${this.cropOffset.x}px, ${this.cropOffset.y}px) scale(${this.cropScale})`, transition: this.isDragging ? 'none' : 'transform 0.1s' }; },
-                cropperBoxStyle() { return this.croppingType === 'avatar' ? { width: '200px', height: '200px', borderRadius: '40px' } : { width: '300px', height: '180px' }; },
+                cropperBoxStyle() { return this.croppingType === 'avatar' ? { width: '260px', height: '260px', borderRadius: '50px' } : { width: '320px', height: '180px' }; },
                 activeMembers() {
                     if (!this.activeEvent) return [];
                     const authM = this.activeEvent.sharedWithEmails.map(email => ({ id: email, displayName: this.allProfiles[email]?.nickname || email.split('@')[0], type: 'auth' }));
@@ -337,24 +326,18 @@
                 bgOpacity(v) { localStorage.setItem('bg-opacity', v); },
                 activeMembers: { immediate: true, handler(newVal) { if (newVal.length > 0 && !this.editingRecordId) { if (!this.newRecord.payerId) this.newRecord.payerId = newVal.find(m => m.id === this.user?.email)?.id || newVal[0].id; const defaultSplit = {}; newVal.forEach(m => defaultSplit[m.id] = 0); this.newRecord.splitData = defaultSplit; } } },
                 sharedEvents(newEvents) {
-                    const allEmails = new Set();
-                    newEvents.forEach(ev => ev.sharedWithEmails.forEach(e => allEmails.add(e)));
-                    allEmails.forEach(email => {
-                        onSnapshot(query(collection(db, "users_profile"), where("email", "==", email)), (snap) => {
-                            snap.forEach(doc => this.allProfiles[email] = doc.data());
-                        });
-                    });
+                    newEvents.forEach(ev => ev.sharedWithEmails.forEach(email => {
+                        onSnapshot(query(collection(db, "users_profile"), where("email", "==", email)), (snap) => snap.forEach(doc => this.allProfiles[email] = doc.data()));
+                    }));
                 }
             },
             methods: {
-                // --- 圖片系統 ---
                 updateBgDisplay(base64) { const img = document.getElementById('main-bg'); if (base64) { img.src = base64; img.style.display = 'block'; this.hasCustomBg = true; } else { img.style.display = 'none'; this.hasCustomBg = false; } },
-                async initDB() { return new Promise((res) => { const req = indexedDB.open("ProMobileDB", 1); req.onupgradeneeded = (e) => e.target.result.createObjectStore("images"); req.onsuccess = (e) => res(e.target.result); }); },
+                async initDB() { return new Promise((res) => { const req = indexedDB.open("FinalResponsiveDB_Clean", 1); req.onupgradeneeded = (e) => e.target.result.createObjectStore("images"); req.onsuccess = (e) => res(e.target.result); }); },
                 async saveImg(k, v) { const db = await this.initDB(); db.transaction("images", "readwrite").objectStore("images").put(v, k); },
                 async loadImg(k) { const db = await this.initDB(); return new Promise((res) => { const req = db.transaction("images").objectStore("images").get(k); req.onsuccess = () => res(req.result); }); },
                 async deleteBackground() { if(confirm("刪除背景？")) { const db = await this.initDB(); db.transaction("images","readwrite").objectStore("images").delete('bg'); this.updateBgDisplay(null); } },
                 
-                // --- 裁切系統 ---
                 triggerBgUpload() { this.$refs.bgInput.click(); },
                 triggerAvatarUpload() { this.$refs.avatarInput.click(); },
                 onFileChange(e, type) { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (ev) => { this.croppingImage = ev.target.result; this.croppingType = type; this.cropOffset={x:0,y:0}; this.cropScale=1; }; reader.readAsDataURL(file); e.target.value = ''; },
@@ -363,18 +346,17 @@
                     const isAvatar = this.croppingType === 'avatar';
                     const boxSize = isAvatar ? {w:400,h:400} : {w:1920,h:1080};
                     canvas.width = boxSize.w; canvas.height = boxSize.h;
-                    ctx.drawImage(this.$refs.cropperImage, 0, 0, boxSize.w, boxSize.h);
+                    ctx.drawImage(this.$refs.cropperImage, 0, 0, boxSize.w, boxSize.h); 
                     const res = canvas.toDataURL('image/jpeg', 0.8);
                     if (isAvatar) { this.customAvatarUrl = res; updateDoc(doc(db, "users_profile", this.user.uid), { avatar: res }); }
                     else { this.updateBgDisplay(res); this.saveImg('bg', res); }
                     this.croppingImage = null;
                 },
 
-                // --- 帳本邏輯 ---
                 async renameEvent(ev) { const n = prompt("修改帳本名稱：", ev.name); if (n?.trim() && n !== ev.name) await updateDoc(doc(db, "events", ev.id), { name: n.trim() }); },
                 async makeAdmin(email) { if (confirm(`授權 ${email} 管理？`)) await updateDoc(doc(db, "events", this.currentEventId), { admins: arrayUnion(email) }); },
                 async removeMember(m) {
-                    if (confirm(`移除成員 ${m.displayName}？`)) {
+                    if (confirm(`確定移除 ${m.displayName}？`)) {
                         if (m.type === 'auth') await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayRemove(m.id), admins: arrayRemove(m.id) });
                         else {
                             const newM = this.activeEvent.manualMembers.filter(p => p.id !== m.id);
@@ -383,13 +365,13 @@
                     }
                 },
                 async addNewEvent() { const n = prompt("新帳本名稱："); if (n?.trim()) { const id = "ev_" + Date.now(); await setDoc(doc(db, "events", id), { id, name: n.trim(), admins: [this.user.email], sharedWithEmails: [this.user.email], manualMembers: [], records: [] }); this.currentEventId = id; } },
-                async deleteEvent() { if (confirm("警告：確定要永久刪除？")) { await deleteDoc(doc(db, "events", this.currentEventId)); this.currentEventId = null; } },
-                async inviteMember() { if (this.inviteEmail.trim()) { await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayUnion(this.inviteEmail.trim()) }); this.inviteEmail = ''; alert("已邀請"); } },
-                async addManualMember() { if (this.newManualName.trim()) { await updateDoc(doc(db, "events", this.currentEventId), { manualMembers: arrayUnion({ id: "m_"+Date.now(), name: this.newManualName.trim() }) }); this.newManualName = ''; alert("已新增"); } },
+                async deleteEvent() { if (confirm("警告：即將永久刪除此帳本！")) { await deleteDoc(doc(db, "events", this.currentEventId)); this.currentEventId = null; } },
+                async inviteMember() { if (this.inviteEmail.trim()) { await updateDoc(doc(db, "events", this.currentEventId), { sharedWithEmails: arrayUnion(this.inviteEmail.trim()) }); this.inviteEmail = ''; alert("邀請成功"); } },
+                async addManualMember() { if (this.newManualName.trim()) { await updateDoc(doc(db, "events", this.currentEventId), { manualMembers: arrayUnion({ id: "m_"+Date.now(), name: this.newManualName.trim() }) }); this.newManualName = ''; alert("新增成功"); } },
                 
                 toggleSplitMember(id) { if (this.newRecord.splitData[id] !== undefined) delete this.newRecord.splitData[id]; else this.newRecord.splitData[id] = 0; },
                 async addRecord() {
-                    const count = Object.keys(this.newRecord.splitData).length; if (this.newRecord.amount <= 0 || count === 0) return alert("填入金額並選擇分攤人");
+                    const count = Object.keys(this.newRecord.splitData).length; if (this.newRecord.amount <= 0 || count === 0) return alert("請填入金額並選擇分攤人");
                     let finalData = { ...this.newRecord.splitData };
                     if (this.splitMode === 'equal') { const avg = this.newRecord.amount / count; Object.keys(finalData).forEach(k => finalData[k] = avg); }
                     else if (Math.abs(this.customTotal - this.newRecord.amount) > 1) return alert("金額總計不符！");
