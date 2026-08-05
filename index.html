@@ -275,16 +275,6 @@
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, arrayUnion, arrayRemove, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBZWo7OOlFc_a524GqY4buoGRLN0mCxGo0",
-            authDomain: "my-expense-app-9980a.firebaseapp.com",
-            projectId: "my-expense-app-9980a",
-            storageBucket: "my-expense-app-9980a.firebasestorage.app",
-            messagingSenderId: "921560661613",
-            appId: "1:921560661613:web:3b416a4dcf9c529a058964",
-            measurementId: "G-1D67MRST3H"
-        };
-
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
